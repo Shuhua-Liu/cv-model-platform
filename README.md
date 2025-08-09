@@ -39,9 +39,9 @@ generated = client.predict("stable_diffusion",
                          prompt="a beautiful sunset over mountains")
 ```
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 方法一：一键安装（推荐）
+### Method 1: One-Click Install (Recommended)
 
 ```bash
 # 1. 克隆项目
@@ -76,7 +76,7 @@ python -m cv_platform.api.rest_api
 平台会自动搜索以下位置的模型文件：
 
 ```
-~/ai_models/  # 推荐的模型存放位置
+~/cv_models/  # 推荐的模型存放位置
 ├── detection/
 │   ├── yolo/
 │   │   ├── yolov8n.pt
@@ -255,7 +255,7 @@ class MyPlugin(BasePlugin):
 
 完整基准测试：[性能报告](docs/benchmarks.md)
 
-## 📚 文档
+## 📚 Docs
 
 - 📖 [用户指南](docs/user_guide/)
 - 🔧 [开发者文档](docs/developer_guide/)  
@@ -273,5 +273,3 @@ class MyPlugin(BasePlugin):
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
-
-详细

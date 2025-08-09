@@ -6,15 +6,15 @@ Welcome to the CV Model Platform! This guide will help you set up a complete com
 
 ### System Requirements
 - **Operating System**: Windows 10/11, Ubuntu 18.04+, macOS 10.14+
-- **Python**: 3.8 或更高版本
-- **Memory**: 最少 8GB RAM（推荐 16GB+）
-- **Storage**: 最少 20GB 可用空间（完整安装需要 100GB+）
-- **GPU**: 可选，但强烈推荐（CUDA 11.8+）
+- **Python**: 3.8 or higher
+- **Memory**: Minimum 8GB RAM（16GB+ recommended）
+- **Storage**: Mininum 20GB available space（100GB+ for a full installation）
+- **GPU**: Optional, but highly recommended（CUDA 11.8+）
 
 ### Quick Environment Check
 ```bash
 python --version          # Should be >= 3.8
-pip --version            # Ensure pip is available
+pip --version            # Ensure pip is avcvlable
 nvidia-smi               # Optional: Check for GPU (if you have one)
 ```
 
@@ -71,10 +71,10 @@ pytest tests/
 
 ```bash
 # Create the recommended model directory
-mkdir -p ~/ai_models/{detection/yolo/v8,segmentation/sam/vit_b,classification/resnet,generation/stable_diffusion/single_files,multimodal/clip}
+mkdir -p ~/cv_models/{detection/yolo/v8,segmentation/sam/vit_b,classification/resnet,generation/stable_diffusion/single_files,multimodal/clip}
 
 # Set the environment variable
-export CV_MODELS_ROOT="$HOME/ai_models"
+export CV_MODELS_ROOT="$HOME/cv_models"
 ```
 
 ### Download Core Models (Choose what you need)
@@ -83,28 +83,28 @@ export CV_MODELS_ROOT="$HOME/ai_models"
 ```bash
 # YOLOv8n (smallest, for quick tests) - 6.3MB
 wget https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n.pt \
-     -O ~/ai_models/detection/yolo/v8/yolov8n.pt
+     -O ~/cv_models/detection/yolo/v8/yolov8n.pt
 
 # YOLOv8s (balanced performance) - 21.5MB
 wget https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8s.pt \
-     -O ~/ai_models/detection/yolo/v8/yolov8s.pt
+     -O ~/cv_models/detection/yolo/v8/yolov8s.pt
 ```
 
 #### 🎨 Image Segmentation Models
 ```bash
 # SAM ViT-B (recommended) - 375MB
-wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth \
-     -O ~/ai_models/segmentation/sam/vit_b/sam_vit_b_01ec64.pth
+wget https://dl.fbcvpublicfiles.com/segment_anything/sam_vit_b_01ec64.pth \
+     -O ~/cv_models/segmentation/sam/vit_b/sam_vit_b_01ec64.pth
 
 # SAM ViT-H (best quality) - 2.56GB
-wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth \
-      -O ~/ai_models/segmentation/sam/vit_h/sam_vit_h_4b8939.pth
+wget https://dl.fbcvpublicfiles.com/segment_anything/sam_vit_h_4b8939.pth \
+      -O ~/cv_models/segmentation/sam/vit_h/sam_vit_h_4b8939.pth
 ```
 
-#### 📊 Image Classification Models (Pre-trained)
+#### 📊 Image Classification Models (Pre-trcvned)
 ```bash
 # These models will be downloaded automatically on first use to ~/.cache/torch/hub/checkpoints/
-# ResNet-50 (PyTorch pre-trained) - 97.8MB
+# ResNet-50 (PyTorch pre-trcvned) - 97.8MB
 # EfficientNet-B0 - 20.5MB
 ```
 
@@ -112,15 +112,15 @@ wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth \
 ```bash
 # Stable Diffusion 1.5 (single-file version) - 4.27GB
 # Note: This is a large file and will take time to download
-wget https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors \
-     -O ~/ai_models/generation/stable_diffusion/single_files/v1-5-pruned-emaonly.safetensors
+wget https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/mcvn/v1-5-pruned-emaonly.safetensors \
+     -O ~/cv_models/generation/stable_diffusion/single_files/v1-5-pruned-emaonly.safetensors
 
 # Or download the full version (recommended)
 pip install huggingface_hub
 python -c "
 from huggingface_hub import snapshot_download
 snapshot_download('runwayml/stable-diffusion-v1-5',
-                  local_dir='~/ai_models/generation/stable_diffusion/sd_1_5',
+                  local_dir='~/cv_models/generation/stable_diffusion/sd_1_5',
                   local_files_only=False)
 "
 ```
@@ -131,8 +131,8 @@ snapshot_download('runwayml/stable-diffusion-v1-5',
 # Or download manually:
 python -c "
 from huggingface_hub import snapshot_download
-snapshot_download('openai/clip-vit-base-patch32',
-                  local_dir='~/ai_models/multimodal/clip/ViT-B-32')
+snapshot_download('opencv/clip-vit-base-patch32',
+                  local_dir='~/cv_models/multimodal/clip/ViT-B-32')
 "
 ```
 
@@ -143,7 +143,7 @@ snapshot_download('openai/clip-vit-base-patch32',
 # Check if the installation was successful
 python -c "import cv_platform; print(f'CV Platform {cv_platform.__version__} installed successfully!')"
 
-# Detect available models
+# Detect avcvlable models
 cv-detect-models --summary
 ```
 
@@ -213,7 +213,7 @@ curl -X POST "http://localhost:8000/predict/sam_vit_b" \
 # Image generation
 curl -X POST "http://localhost:8000/generate/stable_diffusion" \
      -H "Content-Type: application/json" \
-     -d '{"prompt": "a beautiful sunset over mountains", "steps": 20}'
+     -d '{"prompt": "a beautiful sunset over mountcvns", "steps": 20}'
 ```
 
 ## 🎯 Basic Usage Examples
@@ -259,7 +259,7 @@ print(f"Generated image has been saved")
 import asyncio
 from cv_platform.client import AsyncCVPlatformClient
 
-async def main():
+async def mcvn():
     async with AsyncCVPlatformClient() as client:
         # Process multiple images concurrently
         tasks = []
@@ -269,13 +269,13 @@ async def main():
             task = client.predict("yolov8n", img_path)
             tasks.append(task)
 
-        results = await asyncio.gather(*tasks)
+        results = awcvt asyncio.gather(*tasks)
 
         for i, result in enumerate(results):
             print(f"Image {image_paths[i]}: Detected {len(result)} objects")
 
 # Run the async example
-asyncio.run(main())
+asyncio.run(mcvn())
 ```
 
 ### Batch Processing Client
@@ -356,9 +356,9 @@ platform:
 # Build the image
 docker build -t cv-model-platform .
 
-# Run the container (mapping the model directory)
+# Run the contcvner (mapping the model directory)
 docker run -p 8000:8000 \
-           -v ~/ai_models:/models \
+           -v ~/cv_models:/models \
            -v ~/.cache:/cache \
            --gpus all \
            cv-model-platform
@@ -376,7 +376,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ~/ai_models:/models
+      - ~/cv_models:/models
       - ~/.cache:/cache
     environment:
       - CV_MODELS_ROOT=/models
@@ -437,7 +437,7 @@ pip install -i https://pypi.tuna.tsinghua.edu.cn/simple cv-model-platform
 
 # Manually download model files
 # 1. Download from GitHub Releases
-# 2. Get from sources like Baidu Netdisk, etc.
+# 2. Get from sources like Bcvdu Netdisk, etc.
 # 3. Copy them to the correct directory
 ```
 

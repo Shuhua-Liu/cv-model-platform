@@ -156,7 +156,7 @@ class AdapterRegistry:
         # 这里注册我们即将实现的内置适配器
         
         try:
-            # YOLOv8 检测适配器
+            # YOLO 检测适配器
             from .detection.ultralytics import UltralyticsAdapter
             self.register(
                 'ultralytics',
@@ -194,14 +194,20 @@ class AdapterRegistry:
             logger.debug("DeepLabV3适配器未找到，跳过注册")
         
         try:
-            # ResNet 分类适配器
+            #  Torchvision 分类适配器
             from .classification.torchvision import TorchvisionAdapter
             self.register(
-                'torchvision',
+                'torchvision_classification',
                 TorchvisionAdapter,
                 frameworks=['torchvision'],
                 architectures=['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152',
-                              'efficientnet_b0', 'efficientnet_b1', 'efficientnet_b2']
+                              'efficientnet_b0', 'efficientnet_b1', 'efficientnet_b2', 
+                              'efficientnet_b3', 'efficientnet_b4', 'efficientnet_b5',
+                              'efficientnet_b6', 'efficientnet_b7',
+                              'mobilenet_v2', 'mobilenet_v3_large', 'mobilenet_v3_small',
+                              'densenet121', 'densenet169', 'densenet201',
+                              'vgg11', 'vgg13', 'vgg16', 'vgg19',
+                              'vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32']
             )
         except ImportError:
             logger.debug("Torchvision适配器未找到，跳过注册")
@@ -213,22 +219,47 @@ class AdapterRegistry:
                 'stable_diffusion',
                 StableDiffusionAdapter,
                 frameworks=['diffusers'],
-                architectures=['stable_diffusion', 'stable_diffusion_xl', 'flux']
+                architectures=['stable_diffusion', 'stable_diffusion_xl', 'sdxl', 'sd1', 'sd2']
             )
         except ImportError:
             logger.debug("Stable Diffusion适配器未找到，跳过注册")
+
+        try:
+            # FLUX 生成适配器
+            from .generation.flux import FluxAdapter
+            self.register(
+                'flux',
+                FluxAdapter,
+                frameworks=['diffusers'],
+                architectures=['flux', 'flux-dev', 'flux-schnell', 'flux-pro']
+            )
+        except ImportError:
+            logger.debug("FLUX适配器未找到，跳过注册")
         
         try:
-            # CLIP 多模态适配器
+            # CLIP 多模态适配器（OpenAI CLIP）
             from .multimodal.clip import CLIPAdapter
             self.register(
                 'clip',
                 CLIPAdapter,
-                frameworks=['transformers', 'open_clip'],
-                architectures=['clip-vit-base', 'clip-vit-large']
+                frameworks=['clip', 'transformers'],
+                architectures=['clip-vit-base', 'clip-vit-large', 'vit-b-32', 'vit-b-16', 
+                              'vit-l-14', 'vit-l-14-336', 'rn50', 'rn101']
             )
         except ImportError:
             logger.debug("CLIP适配器未找到，跳过注册")
+        
+        try:
+            # OpenCLIP 多模态适配器
+            from .multimodal.openclip import OpenCLIPAdapter
+            self.register(
+                'openclip',
+                OpenCLIPAdapter,
+                frameworks=['open_clip'],
+                architectures=['convnext', 'coca', 'eva', 'openclip-vit']
+            )
+        except ImportError:
+            logger.debug("OpenCLIP适配器未找到，跳过注册")
     
     def auto_detect_adapter(self, 
                            model_path: str,
