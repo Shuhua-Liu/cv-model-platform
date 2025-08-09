@@ -80,34 +80,58 @@ class DeepLabV3Adapter(SegmentationAdapter):
             # 根据文件名判断具体的模型架构
             model_name = self.model_path.name.lower()
             
+            # 首先尝试直接加载用户的权重文件
+            if self.model_path.exists():
+                logger.info("检测到本地模型文件，尝试直接加载...")
+                
+                try:
+                    # 直接加载整个模型状态
+                    checkpoint = torch.load(self.model_path, map_location=self.device)
+                    
+                    # 如果是完整的模型，直接使用
+                    if hasattr(checkpoint, 'state_dict') or not isinstance(checkpoint, dict):
+                        self.model = checkpoint
+                        if hasattr(self.model, 'to'):
+                            self.model = self.model.to(self.device)
+                        self.model.eval()
+                        self.is_loaded = True
+                        logger.info("成功直接加载完整模型")
+                        return
+                except Exception as e:
+                    logger.info(f"直接加载失败，尝试使用torchvision架构: {e}")
+            
+            # 如果直接加载失败，使用torchvision架构
+            logger.info("使用torchvision架构创建模型...")
+            
             if 'resnet101' in model_name:
                 self.model = models.segmentation.deeplabv3_resnet101(
-                    weights=None, 
+                    weights=None,  # 不使用预训练权重
                     num_classes=self.num_classes
                 )
-                logger.info("使用ResNet-101作为backbone")
+                logger.info("创建DeepLabV3-ResNet101架构")
             elif 'resnet50' in model_name:
                 self.model = models.segmentation.deeplabv3_resnet50(
-                    weights=None, 
+                    weights=None,
                     num_classes=self.num_classes
                 )
-                logger.info("使用ResNet-50作为backbone")
+                logger.info("创建DeepLabV3-ResNet50架构")
             elif 'mobilenet' in model_name:
                 self.model = models.segmentation.deeplabv3_mobilenet_v3_large(
-                    weights=None, 
+                    weights=None,
                     num_classes=self.num_classes
                 )
-                logger.info("使用MobileNetV3-Large作为backbone")
+                logger.info("创建DeepLabV3-MobileNetV3架构")
             else:
                 # 默认使用ResNet-101
                 self.model = models.segmentation.deeplabv3_resnet101(
-                    weights=None, 
+                    weights=None,
                     num_classes=self.num_classes
                 )
-                logger.info("使用默认ResNet-101作为backbone")
+                logger.info("创建默认DeepLabV3-ResNet101架构")
             
-            # 加载预训练权重
+            # 加载用户的权重文件
             if self.model_path.exists():
+                logger.info("加载用户权重文件...")
                 checkpoint = torch.load(self.model_path, map_location=self.device)
                 
                 # 处理不同的检查点格式
@@ -121,14 +145,18 @@ class DeepLabV3Adapter(SegmentationAdapter):
                 else:
                     state_dict = checkpoint
                 
-                # 加载状态字典
+                # 尝试加载状态字典
                 try:
                     self.model.load_state_dict(state_dict, strict=True)
+                    logger.info("成功加载用户权重（严格模式）")
                 except RuntimeError as e:
                     logger.warning(f"严格模式加载失败，尝试非严格模式: {e}")
-                    self.model.load_state_dict(state_dict, strict=False)
-                
-                logger.info("成功加载预训练权重")
+                    try:
+                        self.model.load_state_dict(state_dict, strict=False)
+                        logger.info("成功加载用户权重（非严格模式）")
+                    except RuntimeError as e:
+                        logger.error(f"权重加载失败: {e}")
+                        logger.info("使用随机初始化的权重")
             else:
                 logger.warning(f"模型文件不存在: {self.model_path}")
                 logger.info("使用随机初始化的权重")

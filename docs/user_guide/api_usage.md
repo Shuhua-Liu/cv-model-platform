@@ -1,68 +1,68 @@
-# CV Model Platform REST API 使用指南
+# CV Model Platform REST API Usage Guide
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 1. 安装依赖
+### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 启动API服务器
+### 2. Start the API Server
 ```bash
-# 使用默认配置启动
+# Start with default configuration
 python scripts/start_api.py
 
-# 自定义配置启动
+# Start with custom configuration
 python scripts/start_api.py --host 0.0.0.0 --port 8000 --workers 4
 
-# 开发模式（热重载）
+# Development mode (hot-reload)
 python scripts/start_api.py --reload --log-level debug
 ```
 
-### 3. 访问API文档
+### 3. Access API Documentation
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
-- **API根路径**: http://localhost:8000/
+- **API Root**: http://localhost:8000/
 
-## 📋 API端点概览
+## 📋 API Endpoint Overview
 
-### 系统管理
-| 端点 | 方法 | 描述 |
+### System Management
+| Endpoint | Method | Description |
 |------|------|------|
-| `/` | GET | API信息和端点列表 |
-| `/health` | GET | 健康检查和系统状态 |
-| `/models` | GET | 获取所有可用模型 |
-| `/models/{name}` | GET | 获取特定模型详细信息 |
+| `/` | GET | API information and endpoint list |
+| `/health` | GET | Health check and system status |
+| `/models` | GET | Get all available models |
+| `/models/{name}` | GET | Get details for a specific model |
 
-### 模型调用
-| 端点 | 方法 | 描述 |
+### Model Invocation
+| Endpoint | Method | Description |
 |------|------|------|
-| `/detect/{model_name}` | POST | 目标检测 |
-| `/segment/{model_name}` | POST | 图像分割 |
-| `/classify/{model_name}` | POST | 图像分类 |
-| `/generate/{model_name}` | POST | 图像生成 |
+| `/detect/{model_name}` | POST | Object Detection |
+| `/segment/{model_name}` | POST | Image Segmentation |
+| `/classify/{model_name}` | POST | Image Classification |
+| `/generate/{model_name}` | POST | Image Generation |
 
-### 缓存管理
-| 端点 | 方法 | 描述 |
+### Cache Management
+| Endpoint | Method | Description |
 |------|------|------|
-| `/cache/stats` | GET | 获取缓存统计 |
-| `/cache/clear` | POST | 清空模型缓存 |
+| `/cache/stats` | GET | Get cache statistics |
+| `/cache/clear` | POST | Clear the model cache |
 
-## 🔍 使用示例
+## 🔍 Usage Examples
 
-### Python客户端
+### Python Client
 ```python
 import requests
 
-# 健康检查
+# Health check
 response = requests.get("http://localhost:8000/health")
 print(response.json())
 
-# 获取模型列表
+# Get model list
 response = requests.get("http://localhost:8000/models")
 models = response.json()["data"]
 
-# 目标检测
+# Object Detection
 with open("image.jpg", "rb") as f:
     response = requests.post(
         "http://localhost:8000/detect/yolov8n",
@@ -72,21 +72,21 @@ with open("image.jpg", "rb") as f:
     result = response.json()
 ```
 
-### cURL示例
+### cURL Example
 ```bash
-# 健康检查
+# Health check
 curl http://localhost:8000/health
 
-# 获取模型列表
+# Get model list
 curl http://localhost:8000/models
 
-# 目标检测
+# Object Detection
 curl -X POST \
   -F "image=@test_image.jpg" \
   -F "confidence=0.25" \
   http://localhost:8000/detect/yolov8n
 
-# 图像分割
+# Image Segmentation
 curl -X POST \
   -F "image=@test_image.jpg" \
   -F "mode=automatic" \
@@ -94,9 +94,9 @@ curl -X POST \
   http://localhost:8000/segment/deeplabv3_resnet101
 ```
 
-### JavaScript示例
+### JavaScript Example
 ```javascript
-// 使用FormData上传图像
+// Using FormData to upload an image
 const formData = new FormData();
 formData.append('image', fileInput.files[0]);
 formData.append('confidence', '0.25');
@@ -108,46 +108,46 @@ fetch('http://localhost:8000/detect/yolov8n', {
 .then(response => response.json())
 .then(data => {
     if (data.success) {
-        console.log('检测结果:', data.data.detections);
+        console.log('Detection results:', data.data.detections);
     }
 });
 ```
 
-## 📊 响应格式
+## 📊 Response Format
 
-### 成功响应
+### Success Response
 ```json
 {
     "success": true,
-    "message": "操作成功",
+    "message": "Operation successful",
     "data": { ... },
     "execution_time": 1.23,
     "request_id": "abc123"
 }
 ```
 
-### 错误响应
+### Error Response
 ```json
 {
     "success": false,
-    "message": "错误描述",
+    "message": "Error Description",
     "request_id": "abc123"
 }
 ```
 
-## 🔍 目标检测API
+## 🔍 Object Detection API
 
-### 请求
+### Request
 ```http
 POST /detect/{model_name}
 Content-Type: multipart/form-data
 
-image: [图像文件]
-confidence: 0.25 (可选，默认0.25)
-nms_threshold: 0.45 (可选，默认0.45)
+image: [Image File]
+confidence: 0.25 (optional, default 0.25)
+nms_threshold: 0.45 (optional, default 0.45)
 ```
 
-### 响应
+### Response
 ```json
 {
     "success": true,
@@ -171,23 +171,23 @@ nms_threshold: 0.45 (可选，默认0.45)
 }
 ```
 
-## 🎨 图像分割API
+## 🎨 Image Segmentation API
 
-### 请求
+### Request
 ```http
 POST /segment/{model_name}
 Content-Type: multipart/form-data
 
-image: [图像文件]
+image: [Image File]
 mode: "automatic" (automatic/point/box)
-threshold: 0.5 (可选)
-save_visualization: false (可选)
-points: "[[x1,y1],[x2,y2]]" (point模式时需要)
-point_labels: "[1,0]" (point模式时需要)
-box: "[x1,y1,x2,y2]" (box模式时需要)
+threshold: 0.5 (optional)
+save_visualization: false (optional)
+points: "[[x1,y1],[x2,y2]]" (required for point mode)
+point_labels: "[1,0]" (required for point mode)
+box: "[x1,y1,x2,y2]" (required for box mode)
 ```
 
-### 响应
+### Response
 ```json
 {
     "success": true,
@@ -205,18 +205,18 @@ box: "[x1,y1,x2,y2]" (box模式时需要)
 }
 ```
 
-## 📊 图像分类API
+## 📊 Image Classification API
 
-### 请求
+### Request
 ```http
 POST /classify/{model_name}
 Content-Type: multipart/form-data
 
-image: [图像文件]
-top_k: 5 (可选，默认5)
+image: [Image File]
+top_k: 5 (optional, default 5)
 ```
 
-### 响应
+### Response
 ```json
 {
     "success": true,
@@ -236,31 +236,31 @@ top_k: 5 (可选，默认5)
 }
 ```
 
-## 🚀 部署配置
+## 🚀 Deployment Configuration
 
-### 生产环境配置
+### Production Environment Configuration
 ```bash
-# 使用Gunicorn部署
+# Deploy with Gunicorn
 pip install gunicorn
 
-# 启动多进程服务
+# Start multi-process service
 gunicorn src.cv_platform.api.rest_api:app \
     --workers 4 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind 0.0.0.0:8000 \
     --timeout 300
 
-# 使用supervisor管理进程
-# 配置文件示例见 deploy/supervisor.conf
+# Manage processes with supervisor
+# See deploy/supervisor.conf for an example configuration
 ```
 
-### Docker部署
+### Docker Deployment
 ```dockerfile
 FROM python:3.10-slim
 
 WORKDIR /app
-COPY requirements_api.txt .
-RUN pip install -r requirements_api.txt
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
 COPY . .
 EXPOSE 8000
@@ -268,7 +268,7 @@ EXPOSE 8000
 CMD ["python", "scripts/start_api.py", "--host", "0.0.0.0"]
 ```
 
-### Nginx反向代理
+### Nginx Reverse Proxy
 ```nginx
 server {
     listen 80;
@@ -288,16 +288,16 @@ server {
 }
 ```
 
-## 🔒 安全考虑
+## 🔒 Security Considerations
 
-### 文件上传限制
-- 最大文件大小：100MB
-- 支持格式：JPEG, PNG, WebP
-- 文件类型验证：基于MIME类型
+### File Upload Limits
+- Max file size: 100MB
+- Supported formats: JPEG, PNG, WebP
+- File type validation: Based on MIME type
 
-### 访问控制
+### Access Control
 ```python
-# 可以添加认证中间件
+# Authentication middleware can be added
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 
@@ -305,13 +305,13 @@ security = HTTPBearer()
 
 @app.middleware("http")
 async def authenticate(request: Request, call_next):
-    # 添加API密钥验证逻辑
+    # Add API key validation logic here
     pass
 ```
 
-### 速率限制
+### Rate Limiting
 ```python
-# 可以使用slowapi进行速率限制
+# slowapi can be used for rate limiting
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 
@@ -325,73 +325,73 @@ async def detect_objects(request: Request, ...):
     pass
 ```
 
-## 📈 监控和日志
+## 📈 Monitoring and Logging
 
-### 性能监控
-- 每个请求的执行时间会记录在响应中
-- 可以集成Prometheus进行指标收集
-- 使用`/health`端点进行健康监控
+### Performance Monitoring
+- Execution time for each request is recorded in the response
+- Can be integrated with Prometheus for metrics collection
+- Use the `/health` endpoint for health monitoring
 
-### 日志配置
+### Logging Configuration
 ```python
-# 配置详细日志
-setup_logger("DEBUG")  # 开发环境
-setup_logger("INFO")   # 生产环境
+# Configure detailed logging
+setup_logger("DEBUG")  # Development environment
+setup_logger("INFO")   # Production environment
 ```
 
-### 错误处理
-- 所有异常都会被捕获并返回友好的错误信息
-- 详细的错误日志会记录到服务器日志中
-- 支持自定义错误处理器
+### Error Handling
+- All exceptions are caught and return a user-friendly error message
+- Detailed error logs are recorded in the server logs
+- Supports custom error handlers
 
-## 🧪 测试
+## 🧪 Testing
 
-### 运行API测试
+### Running API Tests
 ```bash
-# 启动API服务器（终端1）
+# Start the API server (Terminal 1)
 python scripts/start_api.py
 
-# 运行测试客户端（终端2）
+# Run the test client (Terminal 2)
 python examples/api_usage/test_api.py
 
-# 运行简单示例
+# Run simple examples
 python examples/api_usage/simple_client.py
 ```
 
-### 单元测试
+### Unit Tests
 ```bash
-# 使用pytest进行API测试
+# Use pytest for API testing
 pytest tests/api/ -v
 ```
 
-## 🔧 故障排除
+## 🔧 Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **API服务器无法启动**
-   - 检查端口是否被占用
-   - 确认所有依赖已安装
-   - 查看错误日志
+1. **API server fails to start**
+   - Check if the port is already in use
+   - Confirm all dependencies are installed
+   - Check the error logs
 
-2. **模型加载失败**
-   - 检查模型文件路径
-   - 确认模型格式正确
-   - 查看模型配置文件
+2. **Model fails to load**
+   - Check the model file path
+   - Confirm the model format is correct
+   - Check the model configuration file
 
-3. **上传文件失败**
-   - 检查文件大小是否超限
-   - 确认文件格式支持
-   - 查看磁盘空间
+3. **File upload fails**
+   - Check if the file size exceeds the limit
+   - Confirm the file format is supported
+   - Check available disk space
 
-### 调试模式
+### Debug Mode
 ```bash
-# 启用详细日志和热重载
+# Enable detailed logging and hot-reload
 python scripts/start_api.py --reload --log-level debug
 ```
 
 ## 📚 更多资源
 
-- [FastAPI官方文档](https://fastapi.tiangolo.com/)
-- [Uvicorn部署指南](https://www.uvicorn.org/deployment/)
-- [API最佳实践](https://docs.microsoft.com/en-us/azure/architecture/best-practices/api-design)
+- [FastAPI Official Documentation](https://fastapi.tiangolo.com/)
+- [Uvicorn Deployment Guide](https://www.uvicorn.org/deployment/)
+- [API Best Practices](https://docs.microsoft.com/en-us/azure/architecture/best-practices/api-design)
 
