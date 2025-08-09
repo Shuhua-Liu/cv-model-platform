@@ -7,6 +7,19 @@ opencv-python==4.8.0.76
 pyyaml>=6.0
 loguru>=0.7.0
 
+# API Framework and Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+aiofiles>=23.0.0
+
+# Data Validation and Serialization
+pydantic>=2.0.0
+
+# HTTP Client
+httpx>=0.25.0
+requests>=2.31.0
+
 # Optional: Detection model dependencies
 # ultralytics>=8.0.0
 
@@ -17,7 +30,8 @@ loguru>=0.7.0
 # diffusers>=0.21.0
 # transformers>=4.25.0
 
-# Development dependencies (optional)
-# pytest>=7.4.0
+# Development and Test
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
 # black>=23.7.0
 # isort>=5.12.0
