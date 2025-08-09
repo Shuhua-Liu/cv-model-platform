@@ -1,9 +1,86 @@
+# 所有常见的模型文件格式
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+*.pkl
+*.h5
+*.pb
+*.onnx
+*.trt
+*.engine
+*.plan
+*.wts
+*.caffemodel
+*.prototxt
+*.mlmodel
+*.tflite
+*.quantized
+
+# 模型目录
+models/
+data/models/
+weights/
+checkpoints/
+pretrained/
+saved_models/
+model_zoo/
+
+# 大型数据文件
+*.npy
+*.npz
+*.hdf5
+*.mat
+*.parquet
+
+# 🔧 用户配置文件 - 避免覆盖用户设置
+config/models.yaml
+config/platform.yaml
+config/local_*.yaml
+config/user_*.yaml
+config/*.local.yaml
+config/production.yaml
+config/development.yaml
+
+# 但保留模板和示例
+!config/*_template.yaml
+!config/examples/
+!config/schemas/
+
+# 🏃‍♂️ 运行时数据和缓存
+# 平台运行时数据
+data/
+cache/
+logs/
+temp/
+tmp/
+.cache/
+.temp/
+outputs/
+results/
+predictions/
+
+# 特定的缓存目录
+.cv_platform_cache/
+.model_cache/
+.download_cache/
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 日志文件
+*.log
+*.log.*
+logs/
+
+# 🐍 Python 相关
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[codz]
+*.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
 # Distribution / packaging
@@ -27,8 +104,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -46,162 +121,281 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
-*.py.cover
+*.py,cover
 .hypothesis/
 .pytest_cache/
 cover/
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb_checkpoints
 
 # IPython
 profile_default/
 ipython_config.py
 
 # pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+.python-version
 
 # pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
+Pipfile.lock
 
 # poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-#poetry.toml
+poetry.lock
 
 # pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-#pdm.lock
-#pdm.toml
-.pdm-python
-.pdm-build/
+.pdm.toml
 
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-#pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+# PEP 582
 __pypackages__/
 
-# Celery stuff
+# Celery
 celerybeat-schedule
 celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
 
-# Environments
+# 🔒 环境和配置
+# Environment variables
 .env
-.envrc
+.env.local
+.env.development
+.env.test
+.env.production
 .venv
-env/
 venv/
+env/
 ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# Conda environments
+.conda/
 
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
+# 💻 IDE 和编辑器
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
 
 # PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+.idea/
+*.iws
+*.iml
+*.ipr
 
-# Abstra
-# Abstra is an AI-powered process automation framework.
-# Ignore directories containing user credentials, local state, and settings.
-# Learn more at https://abstra.io/docs
-.abstra/
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
 
-# Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
-#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+# Vim
+*.swp
+*.swo
+*~
+.vim/
 
-# Ruff stuff:
-.ruff_cache/
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
 
-# PyPI configuration file
-.pypirc
+# VS Code extensions
+*.vsix
 
-# Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
-.cursorignore
-.cursorindexingignore
+# 💾 操作系统
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# 🌐 Web 和 API 相关
+# Static files (generated)
+staticfiles/
+static_collected/
+media/
+uploads/
+
+# Node.js (if using any JS tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 🐳 容器和部署
+# Docker
+.dockerignore.swp
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# 📊 监控和分析
+# Profiling data
+*.prof
+profile_output*
+
+# Memory profiling
+*.mprofile
+mprofile_*
+
+# Performance data
+benchmark_results/
+profiling_results/
+
+# 🧪 测试相关
+# Test artifacts
+test_outputs/
+test_results/
+test_images/
+test_data/
+mock_data/
+
+# Ignore test models (but keep fixtures)
+tests/fixtures/models/
+!tests/fixtures/sample_images/
+
+# 📝 文档构建
+# MkDocs
+site/
+docs/_build/
+
+# Sphinx
+docs/build/
+docs/source/modules.rst
+docs/source/cv_platform.rst
+
+# 🔐 安全和密钥
+# API keys and secrets
+*.pem
+*.key
+secrets.yaml
+credentials.json
+
+# SSL certificates
+*.crt
+*.cert
+*.cer
+*.der
+
+# 📦 特殊保留项 - 重要!
+# 确保以下重要文件不被忽略
+!README.md
+!QUICKSTART.md
+!LICENSE
+!requirements.txt
+!pyproject.toml
+!setup.py
+!Dockerfile
+!docker-compose.yml
+!.github/
+!.github/workflows/
+!tests/
+!examples/
+!docs/
+!scripts/
+!src/
+!config/examples/
+!config/schemas/
+!config/*_template.yaml
+
+# 确保示例和文档中的图片不被忽略
+!examples/**/*.jpg
+!examples/**/*.png
+!docs/**/*.jpg
+!docs/**/*.png
+!assets/**/*
+
+# 确保测试用的小图片不被忽略
+!tests/fixtures/sample_images/
+!tests/fixtures/**/*.jpg
+!tests/fixtures/**/*.png
+
+# 🎯 平台特定排除
+# Hugging Face cache
+.cache/huggingface/
+.cache/torch/
+
+# Weights & Biases
+wandb/
+
+# TensorBoard logs
+runs/
+tb_logs/
+tensorboard_logs/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Ray
+ray_results/
+
+# CUDA cache
+.nv/
+
+# 📈 性能和基准测试
+# Benchmark data
+benchmarks/results/
+performance_data/
+*.benchmark
+
+# Memory dumps
+*.dump
+core.*
+
+# 🔄 临时和备份文件
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+
+# Temporary files
+*.tmp
+*.temp
+.temporary
+
+# Archive files (usually large)
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.rar
+*.7z

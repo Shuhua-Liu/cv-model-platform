@@ -1,0 +1,303 @@
+name: Model Compatibility Tests
+
+on:
+  schedule:
+    # Run every Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  push:
+    paths:
+      - 'src/cv_platform/adapters/**'
+      - 'config/models_template.yaml'
+      - '.github/workflows/model-compatibility.yml'
+  pull_request:
+    paths:
+      - 'src/cv_platform/adapters/**'
+      - 'config/models_template.yaml'
+  workflow_dispatch:
+    inputs:
+      test_level:
+        description: 'Test level (basic/full)'
+        required: false
+        default: 'basic'
+        type: choice
+        options:
+        - basic
+        - full
+
+jobs:
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+    
+    - name: Generate test matrix
+      id: set-matrix
+      run: |
+        python -c "
+        import json
+        import yaml
+        
+        # Define model categories and their test configs
+        test_matrix = {
+            'detection': {
+                'models': ['yolov8n', 'yolov8s', 'yolov9c'],
+                'test_images': ['coco_sample.jpg', 'voc_sample.jpg'],
+                'backends': ['torch', 'onnx']
+            },
+            'segmentation': {
+                'models': ['sam_vit_b', 'mask2former_r50'],
+                'test_images': ['instance_sample.jpg', 'semantic_sample.jpg'],
+                'backends': ['torch']
+            },
+            'classification': {
+                'models': ['resnet50', 'efficientnet_b0'],
+                'test_images': ['imagenet_sample.jpg'],
+                'backends': ['torch', 'onnx', 'tensorrt']
+            },
+            'generation': {
+                'models': ['sd_1_5', 'sdxl_base'],
+                'test_prompts': ['a beautiful landscape', 'portrait of a cat'],
+                'backends': ['torch']
+            }
+        }
+        
+        # Generate combinations based on test level
+        test_level = '${{ github.event.inputs.test_level }}' or 'basic'
+        combinations = []
+        
+        for category, config in test_matrix.items():
+            models = config['models'][:1] if test_level == 'basic' else config['models']
+            
+            for model in models:
+                for backend in config['backends'][:1] if test_level == 'basic' else config['backends']:
+                    combinations.append({
+                        'category': category,
+                        'model': model,
+                        'backend': backend,
+                        'os': 'ubuntu-latest'
+                    })
+                    
+                    # Add Windows test for basic models
+                    if test_level == 'full' and backend == 'torch':
+                        combinations.append({
+                            'category': category,
+                            'model': model,
+                            'backend': backend,
+                            'os': 'windows-latest'
+                        })
+        
+        print(json.dumps({'include': combinations}))
+        " > matrix.json
+        
+        echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+
+  compatibility-test:
+    needs: prepare-matrix
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+    
+    - name: Cache test models
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/cv_platform_test_models
+        key: test-models-${{ matrix.category }}-${{ matrix.model }}-v1
+        restore-keys: |
+          test-models-${{ matrix.category }}-
+          test-models-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -e .
+        
+        # Install category-specific dependencies
+        if [ "${{ matrix.category }}" == "detection" ]; then
+          pip install ultralytics
+        elif [ "${{ matrix.category }}" == "segmentation" ]; then
+          pip install segment-anything
+        elif [ "${{ matrix.category }}" == "generation" ]; then
+          pip install diffusers transformers
+        fi
+        
+        # Install backend-specific dependencies
+        if [ "${{ matrix.backend }}" == "onnx" ]; then
+          pip install onnxruntime
+        elif [ "${{ matrix.backend }}" == "tensorrt" ]; then
+          pip install tensorrt
+        fi
+      shell: bash
+    
+    - name: Download test models and data
+      run: |
+        python scripts/models/download_test_models.py \
+          --category ${{ matrix.category }} \
+          --model ${{ matrix.model }} \
+          --backend ${{ matrix.backend }}
+    
+    - name: Run compatibility tests
+      id: test
+      run: |
+        python -m pytest tests/compatibility/test_${{ matrix.category }}.py \
+          -k "test_${{ matrix.model }}_${{ matrix.backend }}" \
+          --tb=short \
+          --junitxml=test-results-${{ matrix.category }}-${{ matrix.model }}-${{ matrix.backend }}.xml \
+          -v
+      continue-on-error: true
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}
+        path: test-results-*.xml
+    
+    - name: Create test report
+      if: always()
+      run: |
+        echo "## Test Report: ${{ matrix.category }}/${{ matrix.model }} (${{ matrix.backend }})" >> test_report.md
+        echo "" >> test_report.md
+        
+        if [ "${{ steps.test.outcome }}" == "success" ]; then
+          echo "✅ **Status:** PASSED" >> test_report.md
+        else
+          echo "❌ **Status:** FAILED" >> test_report.md
+        fi
+        
+        echo "- **OS:** ${{ matrix.os }}" >> test_report.md
+        echo "- **Backend:** ${{ matrix.backend }}" >> test_report.md
+        echo "- **Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> test_report.md
+        
+        # Add performance metrics if available
+        if [ -f "performance_metrics.json" ]; then
+          echo "" >> test_report.md
+          echo "### Performance Metrics" >> test_report.md
+          python -c "
+          import json
+          with open('performance_metrics.json') as f:
+              metrics = json.load(f)
+          print(f'- **Inference Time:** {metrics.get(\"inference_time\", \"N/A\")} ms')
+          print(f'- **Memory Usage:** {metrics.get(\"memory_mb\", \"N/A\")} MB')
+          print(f'- **GPU Memory:** {metrics.get(\"gpu_memory_mb\", \"N/A\")} MB')
+          " >> test_report.md
+        fi
+    
+    - name: Upload test report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-reports
+        path: test_report.md
+
+  summarize-results:
+    needs: compatibility-test
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download all test reports
+      uses: actions/download-artifact@v3
+      with:
+        name: test-reports
+        path: reports/
+    
+    - name: Generate summary
+      run: |
+        echo "# Model Compatibility Test Summary" > summary.md
+        echo "" >> summary.md
+        echo "**Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> summary.md
+        echo "**Trigger:** ${{ github.event_name }}" >> summary.md
+        echo "" >> summary.md
+        
+        total=0
+        passed=0
+        
+        for report in reports/*.md; do
+          if [ -f "$report" ]; then
+            total=$((total + 1))
+            if grep -q "✅.*PASSED" "$report"; then
+              passed=$((passed + 1))
+            fi
+            
+            echo "---" >> summary.md
+            cat "$report" >> summary.md
+            echo "" >> summary.md
+          fi
+        done
+        
+        # Add summary statistics at the top
+        sed -i "4i\\
+        ## Overall Results\\
+        \\
+        - **Total Tests:** $total\\
+        - **Passed:** $passed\\
+        - **Failed:** $((total - passed))\\
+        - **Success Rate:** $((passed * 100 / total))%\\
+        " summary.md
+    
+    - name: Upload summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: compatibility-summary
+        path: summary.md
+    
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync('summary.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });
+
+  update-compatibility-matrix:
+    needs: compatibility-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Download test results
+      uses: actions/download-artifact@v3
+      with:
+        name: test-reports
+        path: reports/
+    
+    - name: Update compatibility matrix
+      run: |
+        python scripts/update_compatibility_matrix.py reports/
+    
+    - name: Commit updated matrix
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add docs/compatibility_matrix.md
+        git diff --staged --quiet || git commit -m "Update model compatibility matrix [skip ci]"
+        git push

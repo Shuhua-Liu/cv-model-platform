@@ -1,1 +1,23 @@
+# Core Dependencies - Compatible Versions
+torch>=1.13.0,<2.5.0
+torchvision>=0.14.0,<0.20.0
+numpy>=1.21.0,<2.0.0
+pillow>=9.0.0
+opencv-python==4.8.0.76  
+pyyaml>=6.0
+loguru>=0.7.0
 
+# Optional: Detection model dependencies
+# ultralytics>=8.0.0
+
+# Optional: Segmentation model dependencies
+# segment-anything>=1.0
+
+# Optional: Generation model dependencies
+# diffusers>=0.21.0
+# transformers>=4.25.0
+
+# Development dependencies (optional)
+# pytest>=7.4.0
+# black>=23.7.0
+# isort>=5.12.0
