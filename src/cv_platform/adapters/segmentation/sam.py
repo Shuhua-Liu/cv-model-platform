@@ -1,5 +1,10 @@
 """
-SAM (Segment Anything Model) Adapter
+SAM (Segment Anything Model) Adapter - 修复抽象方法实现
+
+修复内容：
+1. 实现基类的抽象方法 postprocess
+2. 保持原有功能完整性
+3. 添加更好的错误处理
 
 支持的模型：
 - sam_vit_h (ViT-Huge)
@@ -228,6 +233,37 @@ class SAMAdapter(SegmentationAdapter):
         except Exception as e:
             logger.error(f"SAM预测失败: {e}")
             raise
+    
+    def postprocess(self, raw_output: Any, **kwargs) -> Dict[str, Any]:
+        """
+        后处理SAM输出 - 实现基类抽象方法
+        
+        这个方法是为了兼容BaseModelAdapter的抽象方法要求。
+        实际的后处理逻辑在 _postprocess_automatic 和 _postprocess_interactive 中实现。
+        """
+        if isinstance(raw_output, dict):
+            # 如果已经是处理后的字典格式，直接返回
+            return raw_output
+        elif isinstance(raw_output, list):
+            # 如果是SAM自动模式的原始输出（掩码列表）
+            return self._postprocess_automatic(raw_output, **kwargs)
+        elif isinstance(raw_output, tuple) and len(raw_output) == 3:
+            # 如果是SAM交互模式的原始输出（masks, scores, logits）
+            masks, scores, logits = raw_output
+            return self._postprocess_interactive(masks, scores, logits, **kwargs)
+        else:
+            # 未知格式，返回空结果
+            logger.warning(f"未知的SAM输出格式: {type(raw_output)}")
+            return {
+                'masks': np.empty((0, 0, 0)),
+                'scores': [],
+                'areas': [],
+                'bboxes': [],
+                'metadata': {
+                    'error': 'Unknown output format',
+                    **kwargs
+                }
+            }
     
     def _postprocess_interactive(self, 
                                masks: np.ndarray, 
@@ -788,4 +824,3 @@ class SAMAdapter(SegmentationAdapter):
                 logger.debug(f"获取SAM模型详细信息失败: {e}")
         
         return info
-    
