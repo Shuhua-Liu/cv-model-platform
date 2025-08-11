@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from loguru import logger
+from ultralytics.nn.tasks import DetectionModel
 
 
 @dataclass 
@@ -436,7 +437,19 @@ class ModelDetector:
             import torch
             
             # 尝试加载模型检查点信息
-            checkpoint = torch.load(file_path, map_location='cpu', weights_only=True)
+            logger.debug(f"读取PyTorch模型元数据: {file_path}")
+            try:
+                checkpoint = torch.load(file_path, map_location='cpu', weights_only=True)
+                logger.debug(f"使用weights_only=True成功加载")
+            except Exception as weights_only_error:
+                logger.debug(f"weights_only=True加载失败: {weights_only_error}")
+                
+                try:
+                    checkpoint = torch.load(file_path, map_location='cpu', weights_only=False)
+                    logger.debug(f"使用weights_only=False成功加载")
+                except Exception as normal_error:
+                    logger.debug(f"正常加载也失败: {normal_error}")
+                    return metadata
             
             if isinstance(checkpoint, dict):
                 # 常见的检查点键
