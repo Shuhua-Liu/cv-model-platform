@@ -45,7 +45,7 @@ generated = client.predict("stable_diffusion",
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/yourusername/cv-model-platform.git
+git clone https://github.com/Shuhua-Liu/cv-model-platform.git
 cd cv-model-platform
 
 # 2. 一条命令完成所有设置
@@ -58,7 +58,7 @@ python examples/basic_usage/detection_demo.py
 ### 方法二：手动安装
 
 ```bash
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 pip install -e .
 
