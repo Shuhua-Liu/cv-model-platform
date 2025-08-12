@@ -614,7 +614,7 @@ class ModelDetector:
         name = file_path.stem.lower()
         
         # Clean up common suffixes, but keep important identifiers
-        suffixes_to_remove = ['-pruned', '-emaonly', '_pruned', '_ema', '_best', '_final', '_coco', '-586e9e4e']
+        suffixes_to_remove = ['-pruned', '-emaonly', '_pruned', '_ema', '_best', '_final', '_coco', '-586e9e4e', '-cd0a2569']
         for suffix in suffixes_to_remove:
             name = name.replace(suffix, '')
         
