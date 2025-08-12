@@ -1,13 +1,3 @@
-"""
-模型自动发现器 - 修复HuggingFace模型重复检测问题和DeepLabV3变体识别
-
-修复内容：
-1. 避免HuggingFace格式目录中的子组件被检测为独立模型
-2. 改进HuggingFace模型的检测逻辑
-3. 添加更严格的路径过滤
-4. 正确识别DeepLabV3的不同变体（resnet50, resnet101, mobilenet）
-"""
-
 import os
 import json
 import hashlib
@@ -19,7 +9,7 @@ from loguru import logger
 
 @dataclass 
 class ModelInfo:
-    """模型信息数据类"""
+    """Model Information Data Class"""
     name: str
     type: str  # detection, segmentation, classification, generation, multimodal
     path: str
@@ -27,14 +17,14 @@ class ModelInfo:
     size_mb: float
     framework: str  # ultralytics, sam, detectron2, diffusers, etc.
     architecture: str  # yolov8, sam_vit_h, resnet50, stable_diffusion, etc.
-    confidence: float  # 检测置信度 (0-1)
-    metadata: Dict[str, Any]  # 额外的元数据
+    confidence: float  # Detection confidence (0-1)
+    metadata: Dict[str, Any]  # Additional metadata
 
 
 class ModelDetector:
-    """模型自动发现器"""
+    """Automatic Model Discoverer"""
     
-    # 支持的模型文件扩展名
+    # Supported model file extensions
     SUPPORTED_EXTENSIONS = {
         '.pt': 'pytorch',
         '.pth': 'pytorch', 
@@ -46,60 +36,60 @@ class ModelDetector:
         '.bin': 'huggingface',  # HuggingFace binary format
     }
     
-    # HuggingFace模型的标识文件
+    # HuggingFace model identification file
     HUGGINGFACE_INDICATORS = {
-        'model_index.json',     # Diffusers模型
-        'config.json',          # Transformers模型
-        'pytorch_model.bin',    # PyTorch权重
-        'model.safetensors',    # SafeTensors权重
+        'model_index.json',     # Diffusers model
+        'config.json',          # Transformers model 
+        'pytorch_model.bin',    # PyTorch weights
+        'model.safetensors',    # SafeTensors weights
     }
     
-    # HuggingFace子组件目录（应该被跳过）
+    # HuggingFace subcomponent directory (should be skipped)
     HUGGINGFACE_COMPONENT_DIRS = {
         'text_encoder', 'text_encoder_2', 'unet', 'vae', 'safety_checker',
         'feature_extractor', 'scheduler', 'tokenizer', 'image_processor',
         'controlnet', 'adapter'
     }
     
-    # 模型名称模式匹配
+    # Model name pattern matching
     MODEL_PATTERNS = {
-        # YOLO 检测模型
+        # YOLO detection model
         'yolo': {
             'patterns': ['yolov8', 'yolov9', 'yolov10', 'yolo11', 'yolov5'],
             'type': 'detection',
             'framework': 'ultralytics'
         },
-        # SAM 分割模型
+        # SAM segmentation model
         'sam': {
             'patterns': ['sam_vit_h', 'sam_vit_l', 'sam_vit_b', 'mobile_sam'],
             'type': 'segmentation',
             'framework': 'segment_anything'
         },
-        # DeepLab 分割模型 - 支持更多变体
+        # DeepLab segmentation model - Support more variants
         'deeplabv3': {
             'patterns': ['deeplabv3_resnet50', 'deeplabv3_resnet101', 'deeplabv3_mobilenet', 'deeplabv3', 'deeplab'],
             'type': 'segmentation',
             'framework': 'torchvision'
         },
-        # Mask2Former 分割模型
+        # Mask2Former segmentation model
         'mask2former': {
             'patterns': ['mask2former'],
             'type': 'segmentation',
             'framework': 'detectron2'
         },
-        # U-Net 分割模型
+        # U-Net segmentation model
         'unet': {
             'patterns': ['unet', 'u_net'],
             'type': 'segmentation',
             'framework': 'pytorch'
         },
-        # ResNet 分类模型
+        # ResNet classification model
         'resnet': {
             'patterns': ['resnet18-', 'resnet34-', 'resnet50-', 'resnet101-', 'resnet152-'],
             'type': 'classification',
             'framework': 'torchvision'
         },
-        # EfficientNet 分类模型
+        # EfficientNet classification model
         'efficientnet': {
             'patterns': ['efficientnet_b0', 'efficientnet_b1', 'efficientnet_b2', 
                         'efficientnet_b3', 'efficientnet_b4', 'efficientnet_b5',
@@ -107,13 +97,13 @@ class ModelDetector:
             'type': 'classification', 
             'framework': 'timm'
         },
-        # Stable Diffusion 生成模型
+        # Stable Diffusion generation model
         'stable_diffusion': {
             'patterns': ['v1-5-pruned', 'v2-1', 'sdxl', 'sd_xl', 'stable-diffusion'],
             'type': 'generation',
             'framework': 'diffusers'
         },
-        # CLIP 多模态模型
+        # CLIP multimodal model
         'clip': {
             'patterns': ['clip-vit', 'ViT-B-32', 'ViT-B-16', 'ViT-L-14'],
             'type': 'multimodal',
@@ -123,10 +113,10 @@ class ModelDetector:
     
     def __init__(self, models_root: Optional[Path] = None):
         """
-        初始化模型检测器
+        Initialize the model detector
         
         Args:
-            models_root: 模型根目录，默认使用配置管理器中的路径
+            models_root: The model root directory. By default, the path specified in the configuration manager is used.
         """
         if models_root:
             self.models_root = Path(models_root)
@@ -134,10 +124,10 @@ class ModelDetector:
             from .config_manager import get_config_manager
             self.models_root = get_config_manager().get_models_root()
         
-        # 用于跟踪已检测的HuggingFace模型目录
+        # HuggingFace model directory for tracking detected faces
         self._detected_hf_dirs: Set[Path] = set()
         
-        logger.info(f"初始化模型检测器 - 根目录: {self.models_root}")
+        logger.info(f"Initialize the model detector - root directory: {self.models_root}")
     
     def detect_models(self, 
                      include_patterns: Optional[List[str]] = None,
@@ -145,27 +135,27 @@ class ModelDetector:
                      min_size_mb: float = 0.1,
                      max_size_mb: float = 50000) -> List[ModelInfo]:
         """
-        检测所有可用的模型
+        Check all available models
         """
-        logger.info("开始扫描模型文件...")
+        logger.info("Start scanning the model file...")
         
         if not self.models_root.exists():
-            logger.warning(f"模型根目录不存在: {self.models_root}")
+            logger.warning(f"The model root directory does not exist: {self.models_root}")
             return []
         
         detected_models = []
-        self._detected_hf_dirs.clear()  # 重置HuggingFace目录追踪
+        self._detected_hf_dirs.clear()  # Reset HuggingFace directory tracking
         
-        # 第一步：检测HuggingFace格式的模型
+        # Step 1: Detect the HuggingFace format model
         hf_models = self._detect_all_huggingface_models()
         detected_models.extend(hf_models)
         
-        # 第二步：扫描各个类别目录的其他格式模型
+        # Step 2: Scan for other format models in each category directory
         for category_dir in self.models_root.iterdir():
             if not category_dir.is_dir():
                 continue
                 
-            logger.debug(f"扫描目录: {category_dir}")
+            logger.debug(f"Scan directory: {category_dir}")
             category_models = self._scan_directory(
                 category_dir, 
                 include_patterns, 
@@ -175,37 +165,37 @@ class ModelDetector:
             )
             detected_models.extend(category_models)
         
-        # 按置信度和文件大小排序
+        # Sort by confidence and file size
         detected_models.sort(key=lambda x: (x.confidence, x.size_mb), reverse=True)
         
-        logger.info(f"模型扫描完成 - 发现 {len(detected_models)} 个模型")
+        logger.info(f"Model scan completed - {len(detected_models)} models found")
         return detected_models
     
     def _detect_all_huggingface_models(self) -> List[ModelInfo]:
-        """检测所有HuggingFace格式的模型"""
+        """Detect all HuggingFace format models"""
         hf_models = []
         
         for root, dirs, files in os.walk(self.models_root):
             root_path = Path(root)
             
-            # 跳过已经检测过的HuggingFace目录的子目录
+            # Skip subdirectories of HuggingFace directories that have already been detected
             if any(root_path.is_relative_to(hf_dir) and root_path != hf_dir 
                    for hf_dir in self._detected_hf_dirs):
                 continue
             
-            # 检查是否是HuggingFace模型目录
+            # Check if it is the HuggingFace model directory
             if self._is_huggingface_model_dir(root_path):
                 hf_model = self._detect_huggingface_model(root_path)
                 if hf_model:
                     hf_models.append(hf_model)
                     self._detected_hf_dirs.add(root_path)
-                    logger.info(f"检测到HuggingFace模型: {hf_model.name} at {root_path}")
+                    logger.info(f"HuggingFace model detected: {hf_model.name} at {root_path}")
         
         return hf_models
     
     def _is_huggingface_model_dir(self, dir_path: Path) -> bool:
-        """判断目录是否是HuggingFace模型目录"""
-        # 检查是否包含HuggingFace模型的标识文件
+        """Determine whether the directory is a HuggingFace model directory"""
+        # Check whether the identification file of the HuggingFace model is included
         for indicator in self.HUGGINGFACE_INDICATORS:
             if (dir_path / indicator).exists():
                 return True
@@ -217,42 +207,42 @@ class ModelDetector:
                        exclude_patterns: Optional[List[str]], 
                        min_size_mb: float,
                        max_size_mb: float) -> List[ModelInfo]:
-        """扫描指定目录（跳过HuggingFace模型内部文件）"""
+        """Scan the specified directory (skip the internal files of the HuggingFace model)"""
         models = []
         
-        # 递归扫描所有文件
+        # Recursively scan all files
         for file_path in directory.rglob('*'):
             if not file_path.is_file():
                 continue
             
-            # 跳过HuggingFace模型目录内的文件
+            # Skip files in the HuggingFace model directory
             if self._is_inside_huggingface_model(file_path):
                 continue
             
-            # 跳过HuggingFace组件子目录中的文件
+            # Skip files in the HuggingFace component subdirectory
             if self._is_huggingface_component_file(file_path):
                 continue
             
-            # 检查文件扩展名
+            # Check the file extension
             if file_path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
                 continue
             
-            # 检查文件大小
+            # Check file size
             try:
                 size_mb = file_path.stat().st_size / (1024 * 1024)
                 if size_mb < min_size_mb or size_mb > max_size_mb:
                     continue
             except OSError:
-                logger.warning(f"无法读取文件大小: {file_path}")
+                logger.warning(f"Unable to read file size: {file_path}")
                 continue
             
-            # 应用包含/排除模式
+            # Apply include/exclude patterns
             if include_patterns and not any(pattern in file_path.name for pattern in include_patterns):
                 continue
             if exclude_patterns and any(pattern in file_path.name for pattern in exclude_patterns):
                 continue
             
-            # 检测模型信息
+            # Detect model information
             model_info = self._analyze_model_file(file_path)
             if model_info:
                 models.append(model_info)
@@ -260,7 +250,7 @@ class ModelDetector:
         return models
     
     def _is_inside_huggingface_model(self, file_path: Path) -> bool:
-        """检查文件是否在已检测的HuggingFace模型目录内"""
+        """Check if the file is in the detected HuggingFace model directory"""
         for hf_dir in self._detected_hf_dirs:
             try:
                 file_path.relative_to(hf_dir)
@@ -270,49 +260,49 @@ class ModelDetector:
         return False
     
     def _is_huggingface_component_file(self, file_path: Path) -> bool:
-        """检查文件是否在HuggingFace组件子目录中"""
+        """Check if the file is in the HuggingFace component subdirectory"""
         for parent in file_path.parents:
             if parent.name in self.HUGGINGFACE_COMPONENT_DIRS:
-                # 进一步检查上级目录是否可能是HuggingFace模型
+                # Further check whether the parent directory may be a HuggingFace model
                 for ancestor in parent.parents:
                     if self._is_huggingface_model_dir(ancestor):
                         return True
         return False
     
     def _detect_huggingface_model(self, model_dir: Path) -> Optional[ModelInfo]:
-        """检测HuggingFace格式的模型"""
+        """Detecting HuggingFace format models"""
         try:
-            # 优先检查diffusers模型（有model_index.json）
+            # Prioritize checking the diffusers model (with model_index.json)
             model_index_file = model_dir / 'model_index.json'
             if model_index_file.exists():
                 return self._detect_diffusers_model(model_dir, model_index_file)
             
-            # 检查transformers模型（有config.json）
+            # Check transformers model (with config.json)
             config_file = model_dir / 'config.json'
             if config_file.exists():
                 return self._detect_transformers_model(model_dir, config_file)
             
-            # 检查是否只是包含权重文件的目录
+            # Check if it is just the directory containing the weights file
             if any((model_dir / f).exists() for f in ['pytorch_model.bin', 'model.safetensors']):
                 return self._detect_generic_hf_model(model_dir)
             
             return None
             
         except Exception as e:
-            logger.warning(f"检测HuggingFace模型失败 {model_dir}: {e}")
+            logger.warning(f"Failed to detect HuggingFace model {model_dir}: {e}")
             return None
     
     def _detect_diffusers_model(self, model_dir: Path, model_index_file: Path) -> Optional[ModelInfo]:
-        """检测Diffusers模型（如Stable Diffusion）"""
+        """Detect Diffusers models (such as Stable Diffusion)"""
         try:
             with open(model_index_file, 'r', encoding='utf-8') as f:
                 model_index = json.load(f)
             
-            # 计算目录总大小
+            # Calculate the total size of a directory
             total_size = self._calculate_directory_size(model_dir)
             size_mb = total_size / (1024 * 1024)
             
-            # 推断模型类型和架构
+            # Inference model type and architecture
             model_type = 'generation'
             framework = 'diffusers'
             
@@ -343,16 +333,16 @@ class ModelDetector:
                 size_mb=size_mb,
                 framework=framework,
                 architecture=architecture,
-                confidence=0.95,  # 高置信度，因为有明确的model_index.json
+                confidence=0.95,  # High confidence, because there is a clear model_index.json
                 metadata=metadata
             )
             
         except Exception as e:
-            logger.warning(f"检测Diffusers模型失败 {model_dir}: {e}")
+            logger.warning(f"Failed to detect Diffusers model {model_dir}: {e}")
             return None
     
     def _detect_transformers_model(self, model_dir: Path, config_file: Path) -> Optional[ModelInfo]:
-        """检测Transformers模型（如CLIP、BERT等）"""
+        """Detecting Transformers models (such as CLIP, BERT, etc.)"""
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
@@ -360,12 +350,12 @@ class ModelDetector:
             total_size = self._calculate_directory_size(model_dir)
             size_mb = total_size / (1024 * 1024)
             
-            # 根据config推断模型类型
-            model_type = 'multimodal'  # 默认
+            # Infer model type based on config
+            model_type = 'multimodal'  # default
             framework = 'transformers'
             architecture = 'unknown'
             
-            # 根据架构信息推断具体类型
+            # Inferring concrete types based on schema information
             arch = config.get('architectures', [''])[0].lower() if config.get('architectures') else ''
             model_type_from_config = config.get('model_type', '').lower()
             
@@ -401,18 +391,18 @@ class ModelDetector:
             )
             
         except Exception as e:
-            logger.warning(f"检测Transformers模型失败 {model_dir}: {e}")
+            logger.warning(f"Detection of Transformers model failed {model_dir}: {e}")
             return None
     
     def _detect_generic_hf_model(self, model_dir: Path) -> Optional[ModelInfo]:
-        """检测通用HuggingFace模型（只有权重文件）"""
+        """Detecting the generic HuggingFace model (weights file only)"""
         try:
             total_size = self._calculate_directory_size(model_dir)
             size_mb = total_size / (1024 * 1024)
             
             model_name = model_dir.name
             
-            # 基于目录名称推断
+            # Inferred based on directory name
             dir_name = model_name.lower()
             if 'diffusion' in dir_name or 'sd' in dir_name:
                 model_type = 'generation'
@@ -437,39 +427,39 @@ class ModelDetector:
                 size_mb=size_mb,
                 framework='huggingface',
                 architecture=architecture,
-                confidence=0.7,  # 中等置信度
+                confidence=0.7,  # Medium confidence
                 metadata=metadata
             )
             
         except Exception as e:
-            logger.warning(f"检测通用HuggingFace模型失败 {model_dir}: {e}")
+            logger.warning(f"Detection of generic HuggingFace model fails {model_dir}: {e}")
             return None
     
     def _calculate_directory_size(self, directory: Path) -> int:
-        """计算目录总大小"""
+        """Calculate the total size of a directory"""
         total_size = 0
         try:
             for file_path in directory.rglob('*'):
                 if file_path.is_file():
                     total_size += file_path.stat().st_size
         except Exception as e:
-            logger.debug(f"计算目录大小失败 {directory}: {e}")
+            logger.debug(f"Failed to calculate directory size {directory}: {e}")
         return total_size
     
     def _analyze_model_file(self, file_path: Path) -> Optional[ModelInfo]:
-        """分析单个模型文件"""
+        """Analyzing a single model file"""
         try:
-            # 获取基本信息
+            # Get basic information
             size_mb = file_path.stat().st_size / (1024 * 1024)
             file_format = self.SUPPORTED_EXTENSIONS.get(file_path.suffix.lower(), 'unknown')
             
-            # 推断模型类型和框架
+            # Inference model types and frameworks
             model_type, framework, architecture, confidence = self._infer_model_properties(file_path)
             
-            # 生成模型名称
+            # Generate model name
             model_name = self._generate_model_name(file_path, architecture)
             
-            # 收集元数据
+            # Collect metadata
             metadata = self._collect_metadata(file_path)
             
             return ModelInfo(
@@ -485,16 +475,16 @@ class ModelDetector:
             )
             
         except Exception as e:
-            logger.warning(f"分析模型文件失败 {file_path}: {e}")
+            logger.warning(f"Failed to analyze the model file {file_path}: {e}")
             return None
     
     def _infer_model_properties(self, file_path: Path) -> Tuple[str, str, str, float]:
-        """推断模型属性"""
+        """Inferring model properties"""
         filename = file_path.name.lower()
         parent_dirs = [p.name.lower() for p in file_path.parents]
         
-        # 特殊处理：优先检查明确的模型模式
-        # YOLO模型的精确匹配
+        # Special handling: Prioritize checking for explicit model patterns
+        # Exact Matching of the YOLO Model
         yolo_variants = ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x',
                         'yolov9c', 'yolov9e', 'yolov10n', 'yolov10s', 'yolov10m', 'yolov10l', 'yolov10x',
                         'yolo11n', 'yolo11s', 'yolo11m', 'yolo11l', 'yolo11x']
@@ -503,7 +493,7 @@ class ModelDetector:
             if variant in filename:
                 return 'detection', 'ultralytics', variant, 0.95
         
-        # DeepLabV3 检测 - 精确匹配不同变体
+        # DeepLabV3 Detection - Exact Matching of Different Variants
         if 'deeplabv3' in filename:
             if 'resnet101' in filename:
                 arch = 'deeplabv3_resnet101'
@@ -515,37 +505,37 @@ class ModelDetector:
                 arch = 'deeplabv3'
             return 'segmentation', 'torchvision', arch, 0.9
         
-        # Mask2Former 检测
+        # Mask2Former Detection
         if 'mask2former' in filename:
             return 'segmentation', 'detectron2', 'mask2former', 0.9
         
-        # U-Net 检测
+        # U-Net Detection
         if 'unet' in filename or 'u_net' in filename:
             return 'segmentation', 'pytorch', 'unet', 0.9
         
-        # 基于路径和文件名推断
+        # Inferred based on path and file name
         for pattern_group, info in self.MODEL_PATTERNS.items():
             for pattern in info['patterns']:
                 confidence = 0.0
                 
-                # 文件名匹配
+                # File name matching
                 if pattern in filename:
                     confidence += 0.6
                 
-                # 父目录匹配
+                # Parent directory matching
                 if any(pattern in parent_dir for parent_dir in parent_dirs):
                     confidence += 0.3
                     
-                # 路径结构匹配 - 这是最重要的判断依据
+                # Path structure matching - this is the most important basis for judgment
                 if info['type'] in parent_dirs:
-                    confidence += 0.4  # 提高路径结构的权重
+                    confidence += 0.4  # Increase the weight of the path structure
                 
-                if confidence > 0.5:  # 置信度阈值
+                if confidence > 0.5:  # Confidence threshold
                     return info['type'], info['framework'], pattern, confidence
         
-        # 基于目录结构的后备推断（这是最可靠的方法）
+        # Fallback inference based on directory structure (this is the most reliable approach)
         if 'segmentation' in parent_dirs:
-            # 在分割目录中，进一步判断具体框架
+            # In the segmentation directory, further determine the specific framework
             if 'deeplabv3' in filename:
                 if 'resnet101' in filename:
                     return 'segmentation', 'torchvision', 'deeplabv3_resnet101', 0.8
@@ -564,7 +554,7 @@ class ModelDetector:
             elif 'unet' in filename:
                 return 'segmentation', 'pytorch', 'unet', 0.8
             else:
-                # 通用分割模型
+                # General segmentation model
                 return 'segmentation', 'unknown', 'unknown', 0.7
                 
         elif 'detection' in parent_dirs:
@@ -593,21 +583,21 @@ class ModelDetector:
             else:
                 return 'multimodal', 'unknown', 'unknown', 0.7
         
-        # 如果没有明确的目录结构，使用更保守的推断
+        # If there is no clear directory structure, use a more conservative inference
         return 'unknown', 'unknown', 'unknown', 0.1
     
     def _generate_model_name(self, file_path: Path, architecture: str) -> str:
-        """生成模型名称"""
+        """Generate model name"""
         if architecture != 'unknown':
-            # 对于YOLO模型，保持完整的文件名（去掉扩展名）
+            # For the YOLO model, keep the full file name (minus the extension)
             if 'yolo' in architecture.lower():
                 filename = file_path.stem
-                # 保留yolov8n, yolov8s等完整名称
+                # Keep the full name of yolov8n, yolov8s, etc.
                 if any(variant in filename.lower() for variant in ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x',
                                                                    'yolov9c', 'yolov9e', 'yolov10n', 'yolov10s', 'yolov10m']):
                     return filename.lower()
             
-            # 对于DeepLabV3，精确识别不同变体
+            # For DeepLabV3, accurate identification of different variants
             if 'deeplabv3' in architecture.lower():
                 if 'resnet101' in file_path.name.lower():
                     return 'deeplabv3_resnet101'
@@ -620,10 +610,10 @@ class ModelDetector:
             
             return architecture
         
-        # 使用文件名（去掉扩展名）
+        # Use the file name (minus the extension)
         name = file_path.stem.lower()
         
-        # 清理常见后缀，但保留重要的标识符
+        # Clean up common suffixes, but keep important identifiers
         suffixes_to_remove = ['-pruned', '-emaonly', '_pruned', '_ema', '_best', '_final', '_coco', '-586e9e4e']
         for suffix in suffixes_to_remove:
             name = name.replace(suffix, '')
@@ -631,7 +621,7 @@ class ModelDetector:
         return name
     
     def _collect_metadata(self, file_path: Path) -> Dict[str, Any]:
-        """收集模型元数据"""
+        """Collecting model metadata"""
         metadata = {
             'file_path': str(file_path),
             'parent_dir': str(file_path.parent),
@@ -639,7 +629,7 @@ class ModelDetector:
             'file_hash': self._calculate_file_hash(file_path),
         }
         
-        # 尝试读取模型特定的元数据
+        # Attempt to read model-specific metadata
         if file_path.suffix.lower() == '.safetensors':
             metadata.update(self._read_safetensors_metadata(file_path))
         elif file_path.suffix.lower() in ['.pt', '.pth']:
@@ -648,36 +638,36 @@ class ModelDetector:
         return metadata
     
     def _calculate_file_hash(self, file_path: Path, chunk_size: int = 8192) -> str:
-        """计算文件哈希值（仅读取文件头部以提高速度）"""
+        """Calculate the hash value of the file (only read the file header to increase speed)"""
         try:
             hasher = hashlib.md5()
             with open(file_path, 'rb') as f:
-                # 只读取前1MB来计算哈希，避免大文件读取过慢
+                # Only read the first 1MB to calculate the hash to avoid slow reading of large files
                 chunk = f.read(1024 * 1024)
                 hasher.update(chunk)
-            return hasher.hexdigest()[:16]  # 返回前16位
+            return hasher.hexdigest()[:16]  # Return the first 16 bits
         except Exception as e:
-            logger.warning(f"计算文件哈希失败 {file_path}: {e}")
+            logger.warning(f"Failed to calculate file hash {file_path}: {e}")
             return "unknown"
     
     def _read_safetensors_metadata(self, file_path: Path) -> Dict[str, Any]:
-        """读取SafeTensors文件的元数据"""
+        """Read metadata of SafeTensors files"""
         metadata = {}
         try:
-            # SafeTensors文件头包含JSON元数据
+            # The SafeTensors file header contains JSON metadata
             with open(file_path, 'rb') as f:
-                # 读取前8字节获取头部长度
+                # Read the first 8 bytes to get the header length
                 header_size = int.from_bytes(f.read(8), byteorder='little')
-                if header_size < 1024 * 1024:  # 合理的头部大小
+                if header_size < 1024 * 1024:  # Reasonable head size
                     header_bytes = f.read(header_size)
                     header_str = header_bytes.decode('utf-8')
                     header_data = json.loads(header_str)
                     
-                    # 提取有用信息
+                    # Extract useful information
                     if '__metadata__' in header_data:
                         metadata.update(header_data['__metadata__'])
                     
-                    # 统计参数数量
+                    # Number of statistical parameters
                     total_params = 0
                     for tensor_info in header_data.values():
                         if isinstance(tensor_info, dict) and 'shape' in tensor_info:
@@ -690,22 +680,22 @@ class ModelDetector:
                     metadata['total_parameters'] = total_params
                     
         except Exception as e:
-            logger.debug(f"读取SafeTensors元数据失败 {file_path}: {e}")
+            logger.debug(f"Failed to read SafeTensors metadata {file_path}: {e}")
         
         return metadata
     
     def _read_pytorch_metadata(self, file_path: Path) -> Dict[str, Any]:
-        """读取PyTorch模型元数据"""
+        """Reading PyTorch model metadata"""
         metadata = {}
         try:
-            # 这里只获取基本信息，避免完全加载模型
+            # Only basic information is obtained here to avoid fully loading the model
             import torch
             
-            # 尝试加载模型检查点信息
+            # Try loading model checkpoint information
             checkpoint = torch.load(file_path, map_location='cpu', weights_only=True)
             
             if isinstance(checkpoint, dict):
-                # 常见的检查点键
+                # Common checkpoint keys
                 if 'model' in checkpoint:
                     model_state = checkpoint['model']
                 elif 'state_dict' in checkpoint:
@@ -713,30 +703,30 @@ class ModelDetector:
                 else:
                     model_state = checkpoint
                 
-                # 统计参数数量
+                # Number of statistical parameters
                 if isinstance(model_state, dict):
                     total_params = sum(p.numel() for p in model_state.values() if hasattr(p, 'numel'))
                     metadata['total_parameters'] = total_params
                 
-                # 其他元数据
+                # Other metadata
                 for key in ['epoch', 'version', 'arch', 'best_acc1']:
                     if key in checkpoint:
                         metadata[key] = checkpoint[key]
                         
         except Exception as e:
-            logger.debug(f"读取PyTorch元数据失败 {file_path}: {e}")
+            logger.debug(f"Failed to read PyTorch metadata {file_path}: {e}")
         
         return metadata
     
     def generate_config(self, detected_models: List[ModelInfo], output_file: Optional[Path] = None) -> Dict[str, Any]:
-        """根据检测到的模型生成配置文件"""
+        """Generate a configuration file based on the detected model"""
         config = {
             "models_root": str(self.models_root),
             "models": {}
         }
         
         for model in detected_models:
-            # 跳过置信度太低的模型
+            # Skip models with too low confidence
             if model.confidence < 0.3:
                 continue
             
@@ -754,7 +744,7 @@ class ModelDetector:
                 }
             }
             
-            # 添加模型类型特定的默认配置
+            # Add model type specific default configuration
             if model.type == "detection":
                 model_config.update({
                     "batch_size": 4,
@@ -779,17 +769,17 @@ class ModelDetector:
             
             config["models"][model.name] = model_config
         
-        # 保存配置文件
+        # Save the configuration file
         if output_file:
             import yaml
             with open(output_file, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-            logger.info(f"模型配置已保存到: {output_file}")
+            logger.info(f"Model configuration saved to: {output_file}")
         
         return config
     
     def get_summary(self, models: List[ModelInfo]) -> Dict[str, Any]:
-        """获取检测结果摘要"""
+        """Get a summary of test results"""
         summary = {
             "total_models": len(models),
             "by_type": {},
@@ -800,7 +790,7 @@ class ModelDetector:
             "low_confidence": len([m for m in models if m.confidence < 0.3])
         }
         
-        # 按类型统计
+        # Statistics by type
         for model in models:
             model_type = model.type
             if model_type not in summary["by_type"]:
@@ -808,7 +798,7 @@ class ModelDetector:
             summary["by_type"][model_type]["count"] += 1
             summary["by_type"][model_type]["size_mb"] += model.size_mb
         
-        # 按框架统计
+        # Statistics by framework
         for model in models:
             framework = model.framework
             if framework not in summary["by_framework"]:
@@ -819,15 +809,15 @@ class ModelDetector:
         return summary
 
 
-# 便利函数
+# Convenience functions
 def detect_models_in_directory(directory: str, **kwargs) -> List[ModelInfo]:
-    """便利函数：检测指定目录中的模型"""
+    """Convenience functions: Detect models in the specified directory"""
     detector = ModelDetector(Path(directory))
     return detector.detect_models(**kwargs)
 
 
 def generate_models_config(directory: str, output_file: str = None) -> Dict[str, Any]:
-    """便利函数：生成模型配置文件"""
+    """Convenience functions: Generate model configuration file"""
     detector = ModelDetector(Path(directory))
     models = detector.detect_models()
     output_path = Path(output_file) if output_file else None
