@@ -1,1 +1,498 @@
+# =============================================================================
 
+# CV Model Platform - Models Configuration Template
+
+# =============================================================================
+
+# This file defines the configuration for all computer vision models.
+
+# Copy this file to config/models.yaml and customize according to your setup.
+
+# Model root directory - where all model files are stored
+
+# Can use absolute path or relative path from project root
+
+models_root: “./cv_models”
+
+# Model definitions
+
+# Each model entry defines how to load and configure a specific model
+
+models:
+
+# =============================================================================
+
+# Object Detection Models
+
+# =============================================================================
+
+# YOLOv8 Nano - Fastest, smallest model for real-time detection
+
+yolov8n:
+type: detection
+path: “{models_root}/detection/yolo/v8/yolov8n.pt”
+framework: ultralytics
+architecture: yolov8n
+device: auto  # auto, cpu, cuda:0, cuda:1, etc.
+
+```
+# Detection parameters
+batch_size: 4
+confidence: 0.25      # Confidence threshold (0.0-1.0)
+nms_threshold: 0.45   # Non-Maximum Suppression threshold
+max_det: 300          # Maximum number of detections
+
+# Performance optimization
+half_precision: false  # Use FP16 for faster inference (requires GPU)
+optimize: false        # TorchScript optimization
+
+# Input image settings
+imgsz: 640            # Input image size (square)
+augment: false        # Test-time augmentation
+```
+
+# YOLOv8 Small - Good balance between speed and accuracy
+
+yolov8s:
+type: detection
+path: “{models_root}/detection/yolo/v8/yolov8s.pt”
+framework: ultralytics
+architecture: yolov8s
+device: auto
+batch_size: 4
+confidence: 0.25
+nms_threshold: 0.45
+
+# YOLOv8 Medium - Higher accuracy, moderate speed
+
+yolov8m:
+type: detection
+path: “{models_root}/detection/yolo/v8/yolov8m.pt”
+framework: ultralytics
+architecture: yolov8m
+device: auto
+batch_size: 2         # Smaller batch size for larger model
+confidence: 0.25
+nms_threshold: 0.45
+
+# YOLOv8 Large - High accuracy, slower inference
+
+yolov8l:
+type: detection
+path: “{models_root}/detection/yolo/v8/yolov8l.pt”
+framework: ultralytics
+architecture: yolov8l
+device: auto
+batch_size: 1
+confidence: 0.25
+nms_threshold: 0.45
+
+# YOLOv8 Extra Large - Best accuracy, slowest inference
+
+yolov8x:
+type: detection
+path: “{models_root}/detection/yolo/v8/yolov8x.pt”
+framework: ultralytics
+architecture: yolov8x
+device: auto
+batch_size: 1
+confidence: 0.25
+nms_threshold: 0.45
+
+# =============================================================================
+
+# Image Segmentation Models
+
+# =============================================================================
+
+# SAM ViT-Base - Good balance for interactive segmentation
+
+sam_vit_b:
+type: segmentation
+path: “{models_root}/segmentation/sam/vit_b/sam_vit_b_01ec64.pth”
+framework: segment_anything
+architecture: sam_vit_b
+device: auto
+
+```
+# SAM-specific parameters
+points_per_side: 32           # For automatic mask generation
+pred_iou_thresh: 0.88         # IoU threshold for mask filtering
+stability_score_thresh: 0.95  # Stability score threshold
+crop_n_layers: 0              # Number of crop layers
+crop_n_points_downscale_factor: 1
+min_mask_region_area: 0       # Minimum mask area in pixels
+
+# Performance settings
+batch_size: 1
+enable_memory_efficient_attention: true
+```
+
+# SAM ViT-Large - Higher quality segmentation
+
+sam_vit_l:
+type: segmentation
+path: “{models_root}/segmentation/sam/vit_l/sam_vit_l_0b3195.pth”
+framework: segment_anything
+architecture: sam_vit_l
+device: auto
+points_per_side: 32
+pred_iou_thresh: 0.88
+stability_score_thresh: 0.95
+batch_size: 1
+
+# SAM ViT-Huge - Best quality, highest memory requirements
+
+sam_vit_h:
+type: segmentation
+path: “{models_root}/segmentation/sam/vit_h/sam_vit_h_4b8939.pth”
+framework: segment_anything
+architecture: sam_vit_h
+device: auto
+points_per_side: 32
+pred_iou_thresh: 0.88
+stability_score_thresh: 0.95
+batch_size: 1
+enable_memory_efficient_attention: true
+
+# DeepLabV3 ResNet-101 - Semantic segmentation
+
+deeplabv3_resnet101:
+type: segmentation
+path: “{models_root}/segmentation/deeplabv3/deeplabv3_resnet101.pth”
+framework: torchvision
+architecture: deeplabv3_resnet101
+device: auto
+
+```
+# Segmentation parameters
+num_classes: 21       # Number of output classes (21 for PASCAL VOC)
+batch_size: 1
+threshold: 0.5        # Segmentation threshold
+input_size: [512, 512] # Input image size [height, width]
+```
+
+# Mask2Former - Instance segmentation
+
+mask2former_r50:
+type: segmentation
+path: “{models_root}/segmentation/mask2former/mask2former_r50.pkl”
+framework: detectron2
+architecture: mask2former_r50
+device: auto
+batch_size: 1
+confidence: 0.5
+
+# =============================================================================
+
+# Image Classification Models
+
+# =============================================================================
+
+# ResNet-50 - Popular backbone for classification
+
+resnet50:
+type: classification
+path: “torchvision://resnet50”  # Use torchvision pretrained model
+framework: torchvision
+architecture: resnet50
+device: auto
+
+```
+# Classification parameters
+batch_size: 8
+top_k: 5              # Return top-k predictions
+pretrained: true      # Use ImageNet pretrained weights
+num_classes: 1000     # Number of output classes
+
+# Data preprocessing
+input_size: [224, 224]
+normalize: true
+mean: [0.485, 0.456, 0.406]  # ImageNet normalization
+std: [0.229, 0.224, 0.225]
+```
+
+# ResNet-101 - Deeper network for better accuracy
+
+resnet101:
+type: classification
+path: “torchvision://resnet101”
+framework: torchvision
+architecture: resnet101
+device: auto
+batch_size: 4
+top_k: 5
+pretrained: true
+
+# EfficientNet-B0 - Efficient architecture
+
+efficientnet_b0:
+type: classification
+path: “{models_root}/classification/efficientnet/efficientnet_b0.pth”
+framework: timm
+architecture: efficientnet_b0
+device: auto
+batch_size: 8
+top_k: 5
+input_size: [224, 224]
+
+# Vision Transformer - Transformer-based classification
+
+vit_base_patch16:
+type: classification
+path: “{models_root}/classification/vit/vit_base_patch16.pth”
+framework: timm
+architecture: vit_base_patch16_224
+device: auto
+batch_size: 4
+top_k: 5
+input_size: [224, 224]
+
+# =============================================================================
+
+# Image Generation Models
+
+# =============================================================================
+
+# Stable Diffusion 1.5 - Popular text-to-image model
+
+stable_diffusion_1_5:
+type: generation
+path: “{models_root}/generation/stable_diffusion/sd_1_5/”
+framework: diffusers
+architecture: stable_diffusion
+device: auto
+
+```
+# Generation parameters
+batch_size: 1
+num_inference_steps: 20     # Number of denoising steps
+guidance_scale: 7.5         # CFG scale for prompt adherence
+width: 512                  # Output image width
+height: 512                 # Output image height
+
+# Memory optimization
+enable_memory_efficient_attention: true
+enable_xformers: false      # Requires xformers installation
+cpu_offload: false          # Offload to CPU when not in use
+sequential_cpu_offload: false
+
+# Safety and quality
+safety_checker: true        # Enable NSFW content filtering
+enable_watermark: false     # Add invisible watermark
+```
+
+# Stable Diffusion XL - Higher resolution generation
+
+stable_diffusion_xl:
+type: generation
+path: “{models_root}/generation/stable_diffusion/sdxl_base/”
+framework: diffusers
+architecture: stable_diffusion_xl
+device: auto
+batch_size: 1
+num_inference_steps: 20
+guidance_scale: 7.5
+width: 1024               # SDXL native resolution
+height: 1024
+enable_memory_efficient_attention: true
+cpu_offload: true         # Recommended for SDXL due to memory usage
+
+# ControlNet - Controllable generation
+
+controlnet_canny:
+type: generation
+path: “{models_root}/generation/controlnet/controlnet_canny/”
+framework: diffusers
+architecture: controlnet
+device: auto
+base_model: “stable_diffusion_1_5”  # Base model to use with ControlNet
+control_type: “canny”     # Type of control (canny, depth, pose, etc.)
+batch_size: 1
+
+# =============================================================================
+
+# Multimodal Models
+
+# =============================================================================
+
+# CLIP ViT-B/32 - Vision-language understanding
+
+clip_vit_b_32:
+type: multimodal
+path: “{models_root}/multimodal/clip/ViT-B-32/”
+framework: transformers
+architecture: clip_vit_base_patch32
+device: auto
+
+```
+# CLIP parameters
+batch_size: 8
+max_text_length: 77       # Maximum text sequence length
+temperature: 0.07         # Temperature for similarity computation
+
+# Text preprocessing
+text_tokenizer: "clip"
+case_sensitive: false
+```
+
+# CLIP ViT-L/14 - Larger model for better performance
+
+clip_vit_l_14:
+type: multimodal
+path: “{models_root}/multimodal/clip/ViT-L-14/”
+framework: transformers
+architecture: clip_vit_large_patch14
+device: auto
+batch_size: 4
+max_text_length: 77
+
+# LLaVA - Visual question answering
+
+llava_7b:
+type: multimodal
+path: “{models_root}/multimodal/llava/llava-7b/”
+framework: transformers
+architecture: llava
+device: auto
+
+```
+# LLaVA parameters
+batch_size: 1
+max_new_tokens: 512       # Maximum generated text length
+temperature: 0.2          # Generation temperature
+do_sample: true           # Enable sampling
+top_p: 0.9               # Nucleus sampling parameter
+```
+
+# =============================================================================
+
+# Model Groups and Aliases
+
+# =============================================================================
+
+# Define model groups for easy batch operations
+
+model_groups:
+yolo_detection:
+- yolov8n
+- yolov8s
+- yolov8m
+- yolov8l
+- yolov8x
+
+sam_segmentation:
+- sam_vit_b
+- sam_vit_l
+- sam_vit_h
+
+resnet_classification:
+- resnet50
+- resnet101
+
+stable_diffusion:
+- stable_diffusion_1_5
+- stable_diffusion_xl
+
+clip_models:
+- clip_vit_b_32
+- clip_vit_l_14
+
+# Model aliases for backward compatibility and convenience
+
+model_aliases:
+yolo: yolov8n              # Default YOLO model
+sam: sam_vit_b             # Default SAM model
+resnet: resnet50           # Default ResNet model
+sd: stable_diffusion_1_5   # Default Stable Diffusion model
+clip: clip_vit_b_32        # Default CLIP model
+
+# =============================================================================
+
+# Global Model Settings
+
+# =============================================================================
+
+# Default settings applied to all models (can be overridden per model)
+
+defaults:
+device: auto               # Default device for all models
+batch_size: 1             # Conservative default batch size
+timeout: 300              # Model loading timeout in seconds
+retry_attempts: 3         # Number of retry attempts for failed operations
+
+# Memory management
+
+auto_unload: true         # Automatically unload models when not in use
+memory_threshold: 0.9     # GPU memory threshold for auto-unloading
+
+# Caching
+
+enable_cache: true        # Enable model caching
+cache_ttl: 3600          # Cache time-to-live in seconds
+
+# Error handling
+
+fail_fast: false         # Whether to fail immediately on first error
+fallback_device: “cpu”   # Fallback device if primary device fails
+
+# =============================================================================
+
+# Model Validation and Health Checks
+
+# =============================================================================
+
+# Validation settings for model integrity checks
+
+validation:
+enabled: true             # Enable model validation on startup
+check_file_exists: true   # Verify model files exist
+check_file_size: true     # Verify model files are not corrupted
+check_dependencies: true  # Verify required packages are installed
+
+# Performance benchmarks
+
+benchmark_on_startup: false  # Run performance benchmarks on startup
+benchmark_timeout: 60        # Benchmark timeout in seconds
+
+# Health check endpoints
+
+health_check_interval: 300   # Health check interval in seconds
+max_consecutive_failures: 3  # Max failures before marking model as unhealthy
+
+# =============================================================================
+
+# Advanced Configuration
+
+# =============================================================================
+
+# Model-specific optimization settings
+
+optimizations:
+
+# TensorRT optimization (NVIDIA GPUs only)
+
+tensorrt:
+enabled: false
+precision: “fp16”        # fp32, fp16, int8
+workspace_size: “1GB”
+
+# ONNX optimization
+
+onnx:
+enabled: false
+optimization_level: “all”  # basic, extended, all
+
+# Quantization settings
+
+quantization:
+enabled: false
+method: “dynamic”        # dynamic, static, qat
+
+# Development and debugging settings
+
+debug:
+log_model_info: true      # Log detailed model information
+profile_inference: false  # Profile inference performance
+save_intermediate: false  # Save intermediate results for debugging
+verbose_errors: true      # Include detailed error information
