@@ -19,19 +19,19 @@
 # Platform metadata
 
 platform:
-name: “CV Model Platform”
-version: “0.1.0”
-environment: “development”  # development, staging, production
-debug: true                 # Enable debug mode
+  name: "CV Model Platform"
+  version: "0.1.0"
+  environment: "development"  # development, staging, production
+  debug: true                 # Enable debug mode
 
 # Default paths (can be overridden by environment variables)
 
 paths:
-models_root: “./cv_models”     # Default model storage directory
-cache_dir: “.cv_platform_cache”  # Cache directory
-temp_dir: “./temp”             # Temporary files directory
-logs_dir: “./logs”             # Log files directory
-data_dir: “./data”             # Data files directory
+  models_root: "./cv_models"     # Default model storage directory
+  cache_dir: ".cv_platform_cache"  # Cache directory
+  temp_dir: "./temp"             # Temporary files directory
+  logs_dir: "./logs"             # Log files directory
+  data_dir: "./data"             # Data files directory
 
 # =============================================================================
 
@@ -41,84 +41,78 @@ data_dir: “./data”             # Data files directory
 
 api:
 
-# Server settings
+  # Server settings
 
-host: “0.0.0.0”             # Server host (0.0.0.0 for all interfaces)
-port: 8000                  # Server port
-workers: 1                  # Number of worker processes (1 for development)
+  host: "0.0.0.0"             # Server host (0.0.0.0 for all interfaces)
+  port: 8000                  # Server port
+  workers: 1                  # Number of worker processes (1 for development)
 
-# Request limits
+  # Request limits
 
-max_request_size: “100MB”    # Maximum request size
-max_file_size: “50MB”       # Maximum uploaded file size
-request_timeout: 300        # Request timeout in seconds
+  max_request_size: "100MB"    # Maximum request size
+  max_file_size: "50MB"       # Maximum uploaded file size
+  request_timeout: 300        # Request timeout in seconds
 
-# CORS settings
+  # CORS settings
 
-cors:
-enabled: true
-allow_origins: [”*”]      # Allowed origins (use specific domains in production)
-allow_methods: [“GET”, “POST”, “PUT”, “DELETE”, “OPTIONS”]
-allow_headers: [”*”]
-allow_credentials: true
-max_age: 3600            # Preflight cache duration
+  cors:
+    enabled: true
+    allow_origins: ["*"]      # Allowed origins (use specific domains in production)
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers: ["*"]
+    allow_credentials: true
+    max_age: 3600            # Preflight cache duration
 
-# Rate limiting
+  # Rate limiting
 
-rate_limiting:
-enabled: false            # Enable rate limiting
-default_rate: “100/minute”  # Default rate limit
-storage: “memory”         # Storage backend (memory, redis)
+  rate_limiting:
+    enabled: false            # Enable rate limiting
+    default_rate: "100/minute"  # Default rate limit
+    storage: "memory"         # Storage backend (memory, redis)
 
-```
-# Per-endpoint rate limits
-endpoints:
-  "/detect/*": "20/minute"
-  "/segment/*": "10/minute"  
-  "/generate/*": "5/minute"
-  "/health": "60/minute"
-```
+    # Per-endpoint rate limits
+    endpoints:
+      "/detect/*": "20/minute"
+      "/segment/*": "10/minute"  
+      "/generate/*": "5/minute"
+      "/health": "60/minute"
 
-# Authentication and security
+  # Authentication and security
 
-security:
-api_key_header: “X-API-Key”    # API key header name
-require_api_key: false         # Require API key for requests
-allowed_api_keys: []           # List of valid API keys
+  security:
+    api_key_header: "X-API-Key"    # API key header name
+    require_api_key: false         # Require API key for requests
+    allowed_api_keys: []           # List of valid API keys
 
-```
-# JWT settings (if using JWT authentication)
-jwt:
-  enabled: false
-  secret_key: "your-secret-key"  # Change this in production!
-  algorithm: "HS256"
-  expire_minutes: 60
-```
+    # JWT settings (if using JWT authentication)
+    jwt:
+      enabled: false
+      secret_key: "your-secret-key"  # Change this in production!
+      algorithm: "HS256"
+      expire_minutes: 60
 
-# API documentation
+  # API documentation
 
-docs:
-title: “CV Model Platform API”
-description: “Unified Computer Vision Model API”
-version: “0.1.0”
-contact:
-name: “CV Platform Team”
-email: “support@cvplatform.com”
-license:
-name: “MIT”
-url: “https://opensource.org/licenses/MIT”
+  docs:
+    title: "CV Model Platform API"
+    description: "Unified Computer Vision Model API"
+    version: "0.1.0"
+    contact:
+    name: "CV Platform Team"
+    email: "support@cvplatform.com"
+    license:
+    name: "MIT"
+    url: "https://opensource.org/licenses/MIT"
 
-```
-# Swagger UI settings
-swagger_ui:
-  enabled: true
-  path: "/docs"
+    # Swagger UI settings
+    swagger_ui:
+      enabled: true
+      path: "/docs"
 
-# ReDoc settings  
-redoc:
-  enabled: true
-  path: "/redoc"
-```
+    # ReDoc settings  
+    redoc:
+      enabled: true
+      path: "/redoc
 
 # =============================================================================
 
@@ -128,34 +122,34 @@ redoc:
 
 cache:
 
-# Cache enablement
+  # Cache enablement
 
-enabled: true               # Enable model caching
+  enabled: true               # Enable model caching
 
-# Memory limits
+  # Memory limits
 
-max_size: “4GB”            # Maximum cache size (can use MB, GB)
-max_models: 3              # Maximum number of cached models
+  max_size: "4GB"            # Maximum cache size (can use MB, GB)
+  max_models: 3              # Maximum number of cached models
 
-# Cache behavior
+  # Cache behavior
 
-ttl: 3600                  # Time-to-live in seconds (1 hour)
-cleanup_interval: 300      # Cache cleanup interval in seconds
+  ttl: 3600                  # Time-to-live in seconds (1 hour)
+  cleanup_interval: 300      # Cache cleanup interval in seconds
 
-# Cache policies
+  # Cache policies
 
-eviction_policy: “lru”     # Eviction policy (lru, fifo, random)
-preload_models: []         # Models to preload on startup
+  eviction_policy: "lru"     # Eviction policy (lru, fifo, random)
+  preload_models: []         # Models to preload on startup
 
-# Persistence
+  # Persistence
 
-persistent: false          # Enable persistent cache
-persist_path: “./cache/models.cache”  # Persistent cache file path
+  persistent: false          # Enable persistent cache
+  persist_path: "./cache/models.cache"  # Persistent cache file path
 
-# Memory monitoring
+  # Memory monitoring
 
-memory_check_interval: 60   # Memory usage check interval
-auto_cleanup_threshold: 0.9 # Auto cleanup threshold (90% memory usage)
+  memory_check_interval: 60   # Memory usage check interval
+  auto_cleanup_threshold: 0.9 # Auto cleanup threshold (90% memory usage)
 
 # =============================================================================
 
@@ -165,52 +159,52 @@ auto_cleanup_threshold: 0.9 # Auto cleanup threshold (90% memory usage)
 
 logging:
 
-# Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
-level: “INFO”
+  level: "INFO"
 
-# Log format (text, json)
+  # Log format (text, json)
 
-format: “text”
+  format: "text"
 
-# Console logging
+  # Console logging
 
-console:
-enabled: true
-level: “INFO”
-format: “<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>”
+  console:
+    enabled: true
+    level: "INFO"
+    format: "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>"
 
-# File logging
+  # File logging
 
-file:
-enabled: true
-level: “INFO”
-path: “{logs_dir}/cv_platform.log”
-rotation: “10 MB”         # Log rotation size
-retention: “30 days”      # Log retention period
-compression: “zip”        # Compression format
+  file:
+    enabled: true
+    level: "INFO"
+    path: "{logs_dir}/cv_platform.log"
+    rotation: "10 MB"         # Log rotation size
+    retention: "30 days"      # Log retention period
+    compression: "zip"        # Compression format
 
-# Structured logging for monitoring
+  # Structured logging for monitoring
 
-structured:
-enabled: false
-path: “{logs_dir}/cv_platform.jsonl”
-level: “INFO”
+  structured:
+    enabled: false
+    path: "{logs_dir}/cv_platform.jsonl"
+    level: "INFO"
 
-# Access logging
+  # Access logging
 
-access:
-enabled: true
-path: “{logs_dir}/access.log”
-format: ‘{time} {method} {url} {status_code} {duration}ms’
+  access:
+    enabled: true
+    path: "{logs_dir}/access.log"
+    format: '{time} {method} {url} {status_code} {duration}ms'
 
-# Error logging
+  # Error logging
 
-error:
-enabled: true
-path: “{logs_dir}/errors.log”
-level: “ERROR”
-include_traceback: true
+  error:
+    enabled: true
+    path: "{logs_dir}/errors.log"
+    level: "ERROR"
+    include_traceback: true
 
 # =============================================================================
 
@@ -220,49 +214,49 @@ include_traceback: true
 
 performance:
 
-# CPU settings
+  # CPU settings
 
-cpu:
-max_threads: null         # Maximum CPU threads (null = auto-detect)
-affinity: []              # CPU affinity (list of CPU cores)
+  cpu:
+    max_threads: null         # Maximum CPU threads (null = auto-detect)
+    affinity: []              # CPU affinity (list of CPU cores)
 
-# Memory settings
+  # Memory settings
 
-memory:
-max_usage: “80%”          # Maximum memory usage percentage
-warning_threshold: “70%”   # Memory warning threshold
-cleanup_threshold: “90%”   # Force cleanup threshold
+  memory:
+    max_usage: "80%"          # Maximum memory usage percentage
+    warning_threshold: "70%"   # Memory warning threshold
+    cleanup_threshold: "90%"   # Force cleanup threshold
 
-# GPU settings
+  # GPU settings
 
-gpu:
-auto_detect: true         # Auto-detect available GPUs
-devices: “auto”           # GPU devices to use (auto, [0,1], etc.)
-memory_fraction: 0.8      # Fraction of GPU memory to use
-allow_growth: true        # Allow GPU memory growth
+  gpu:
+    auto_detect: true         # Auto-detect available GPUs
+    devices: "auto"           # GPU devices to use (auto, [0,1], etc.)
+    memory_fraction: 0.8      # Fraction of GPU memory to use
+    allow_growth: true        # Allow GPU memory growth
 
-# Batch processing
+  # Batch processing
 
-batch:
-default_size: 1           # Default batch size
-max_size: 8               # Maximum batch size
-auto_batching: false      # Enable automatic batching
-timeout: 30               # Batch timeout in seconds
+  batch:
+    default_size: 1           # Default batch size
+    max_size: 8               # Maximum batch size
+    auto_batching: false      # Enable automatic batching
+    timeout: 30               # Batch timeout in seconds
 
-# Inference optimization
+  # Inference optimization
 
-inference:
-mixed_precision: false    # Enable mixed precision (FP16)
-compile_models: false     # Compile models for optimization
-use_tensorrt: false       # Use TensorRT optimization
-use_onnx: false          # Use ONNX optimization
+  inference:
+    mixed_precision: false    # Enable mixed precision (FP16)
+    compile_models: false     # Compile models for optimization
+    use_tensorrt: false       # Use TensorRT optimization
+    use_onnx: false          # Use ONNX optimization
 
-# Warm-up settings
+  # Warm-up settings
 
-warmup:
-enabled: false            # Enable model warm-up on startup
-models: []               # Models to warm-up
-iterations: 3            # Number of warm-up iterations
+  warmup:
+    enabled: false            # Enable model warm-up on startup
+    models: []               # Models to warm-up
+    iterations: 3            # Number of warm-up iterations
 
 # =============================================================================
 
@@ -272,38 +266,35 @@ iterations: 3            # Number of warm-up iterations
 
 storage:
 
-# File storage
+  # File storage
 
-local:
-enabled: true
-base_path: “./data”
-max_size: “10GB”
-cleanup_interval: 86400   # Daily cleanup
+  local:
+    enabled: true
+    base_path: "./data"
+    max_size: "10GB"
+    cleanup_interval: 86400   # Daily cleanup
 
-# Object storage (S3, MinIO, etc.)
+  # Object storage (S3, MinIO, etc.)
 
-object:
-enabled: false
-provider: “s3”            # s3, minio, gcs, azure
-bucket: “cv-platform”
-region: “us-east-1”
-access_key: “”
-secret_key: “”
-endpoint: “”              # Custom endpoint for MinIO
+  object:
+    enabled: false
+    provider: "s3"            # s3, minio, gcs, azure
+    bucket: "cv-platform"
+    region: "us-east-1"
+    access_key: ""
+    secret_key: ""
+    endpoint: ""              # Custom endpoint for MinIO
 
-# Database for metadata
+  # Database for metadata
 
-database:
-enabled: false
-type: “sqlite”            # sqlite, postgresql, mysql
-url: “sqlite:///./cv_platform.db”
-
-```
-# Connection settings
-pool_size: 5
-max_overflow: 10
-pool_timeout: 30
-```
+  database:
+    enabled: false
+    type: "sqlite"            # sqlite, postgresql, mysql
+    url: "sqlite:///./cv_platform.db"
+    # Connection settings
+    pool_size: 5
+    max_overflow: 10
+    pool_timeout: 3
 
 # =============================================================================
 
@@ -313,62 +304,56 @@ pool_timeout: 30
 
 monitoring:
 
-# Health checks
+  # Health checks
 
-health:
-enabled: true
-check_interval: 60        # Health check interval in seconds
-endpoints:
-- “/health”
-- “/metrics”
+  health:
+    enabled: true
+    check_interval: 60        # Health check interval in seconds
+    endpoints:
+    - "/health"
+    - "/metrics"
+    # Health check parameters
+    checks:
+      - name: "disk_space"
+        threshold: "1GB"       # Minimum free disk space
+      - name: "memory_usage"
+        threshold: "90%"       # Maximum memory usage
+      - name: "gpu_memory"
+        threshold: "95%"       # Maximum GPU memory usag
 
-```
-# Health check parameters
-checks:
-  - name: "disk_space"
-    threshold: "1GB"       # Minimum free disk space
-  - name: "memory_usage"
-    threshold: "90%"       # Maximum memory usage
-  - name: "gpu_memory"
-    threshold: "95%"       # Maximum GPU memory usage
-```
+  # Metrics collection
 
-# Metrics collection
+  metrics:
+    enabled: false
+    provider: "prometheus"     # prometheus, statsd, datadog
+    endpoint: "/metrics"
+    # Metric categories
+    categories:
+      - "system"              # System metrics (CPU, memory, disk)
+      - "api"                 # API metrics (requests, latency, errors)
+      - "models"              # Model metrics (inference time, cache hits)
+      - "custom"              # Custom application metric
 
-metrics:
-enabled: false
-provider: “prometheus”     # prometheus, statsd, datadog
-endpoint: “/metrics”
+  # Distributed tracing
 
-```
-# Metric categories
-categories:
-  - "system"              # System metrics (CPU, memory, disk)
-  - "api"                 # API metrics (requests, latency, errors)
-  - "models"              # Model metrics (inference time, cache hits)
-  - "custom"              # Custom application metrics
-```
+  tracing:
+    enabled: false
+    provider: "jaeger"        # jaeger, zipkin, datadog
+    endpoint: "http://localhost:14268/api/traces"
+    service_name: "cv-model-platform"
 
-# Distributed tracing
+  # Alerting
 
-tracing:
-enabled: false
-provider: “jaeger”        # jaeger, zipkin, datadog
-endpoint: “http://localhost:14268/api/traces”
-service_name: “cv-model-platform”
-
-# Alerting
-
-alerts:
-enabled: false
-channels:
-- type: “webhook”
-url: “https://hooks.slack.com/your-webhook”
-- type: “email”
-smtp_host: “smtp.gmail.com”
-smtp_port: 587
-username: “alerts@yourcompany.com”
-password: “your-password”
+  alerts:
+    enabled: false
+    channels:
+      - type: "webhook"
+        url: "https://hooks.slack.com/your-webhook"
+      - type: "email"
+        smtp_host: "smtp.gmail.com"
+        smtp_port: 587
+        username: "alerts@yourcompany.com"
+        password: "your-password"
 
 # =============================================================================
 
@@ -378,26 +363,26 @@ password: “your-password”
 
 development:
 
-# Debug settings
+  # Debug settings
 
-debug:
-enabled: true             # Enable debug mode
-profiling: false          # Enable profiling
-hot_reload: true          # Enable hot reload
+  debug:
+    enabled: true             # Enable debug mode
+    profiling: false          # Enable profiling
+    hot_reload: true          # Enable hot reload
 
-# Testing
+  # Testing
 
-testing:
-enabled: false
-test_models: []           # Models to use for testing
-mock_responses: false     # Use mock responses for testing
+  testing:
+    enabled: false
+    test_models: []           # Models to use for testing
+    mock_responses: false     # Use mock responses for testing
 
-# Development tools
+  # Development tools
 
-tools:
-auto_format: false        # Auto-format code
-lint_on_save: false       # Lint code on save
-type_checking: false      # Enable type checking
+  tools:
+    auto_format: false        # Auto-format code
+    lint_on_save: false       # Lint code on save
+    type_checking: false      # Enable type checking
 
 # =============================================================================
 
@@ -407,26 +392,26 @@ type_checking: false      # Enable type checking
 
 production:
 
-# Security hardening
+  # Security hardening
 
-security:
-hide_server_header: true   # Hide server identification
-disable_debug: true        # Force disable debug mode
-secure_headers: true       # Add security headers
+  security:
+    hide_server_header: true   # Hide server identification
+    disable_debug: true        # Force disable debug mode
+    secure_headers: true       # Add security headers
 
-# Performance optimization
+  # Performance optimization
 
-optimization:
-precompile_templates: true  # Precompile response templates
-enable_compression: true    # Enable response compression
-static_file_caching: true   # Enable static file caching
+  optimization:
+    precompile_templates: true  # Precompile response templates
+    enable_compression: true    # Enable response compression
+    static_file_caching: true   # Enable static file caching
 
-# Monitoring requirements
+  # Monitoring requirements
 
-monitoring:
-required_health_checks: true  # Require health checks
-error_tracking: true          # Enable error tracking
-performance_monitoring: true  # Enable performance monitoring
+  monitoring:
+    required_health_checks: true  # Require health checks
+    error_tracking: true          # Enable error tracking
+    performance_monitoring: true  # Enable performance monitoring
 
 # =============================================================================
 
@@ -436,38 +421,38 @@ performance_monitoring: true  # Enable performance monitoring
 
 integrations:
 
-# Message queues
+  # Message queues
 
-message_queue:
-enabled: false
-provider: “redis”          # redis, rabbitmq, sqs
-url: “redis://localhost:6379”
+  message_queue:
+    enabled: false
+    provider: "redis"          # redis, rabbitmq, sqs
+    url: "redis://localhost:6379"
 
-# Notification services
+  # Notification services
 
-notifications:
-enabled: false
-providers:
-slack:
-webhook_url: “”
-channel: “#cv-platform”
-email:
-smtp_host: “smtp.gmail.com”
-smtp_port: 587
-username: “”
-password: “”
+  notifications:
+    enabled: false
+    providers:
+      slack:
+        webhook_url: ""
+        channel: "#cv-platform"
+      email:
+        smtp_host: "smtp.gmail.com"
+        smtp_port: 587
+        username: ""
+        password: ""
 
-# External APIs
+  # External APIs
 
-external_apis:
-enabled: false
-apis:
-huggingface:
-api_key: “”
-base_url: “https://api-inference.huggingface.co”
-openai:
-api_key: “”
-base_url: “https://api.openai.com/v1”
+  external_apis:
+    enabled: false
+    apis:
+      huggingface:
+        api_key: ""
+        base_url: "https://api-inference.huggingface.co"
+    openai:
+        api_key: ""
+        base_url: "https://api.openai.com/v1"
 
 # =============================================================================
 
@@ -477,48 +462,44 @@ base_url: “https://api.openai.com/v1”
 
 backup:
 
-# Backup settings
+  # Backup settings
 
-enabled: false
-
-# Backup targets
-
-targets:
-- type: “models”          # Backup model files
-enabled: true
-schedule: “0 2 * * *”    # Daily at 2 AM (cron format)
-retention: “30d”         # Keep backups for 30 days
-
-```
-- type: "configs"         # Backup configuration files
-  enabled: true
-  schedule: "0 3 * * *"    # Daily at 3 AM
-  retention: "90d"         # Keep config backups for 90 days
-  
-- type: "logs"            # Backup log files
   enabled: false
-  schedule: "0 4 * * 0"    # Weekly on Sunday at 4 AM
-  retention: "14d"         # Keep log backups for 14 days
-```
 
-# Backup destinations
+  # Backup targets
 
-destinations:
-- type: “local”
-path: “./backups”
+  targets:
+    - type: "models"          # Backup model files
+      enabled: true
+      schedule: "0 2 * * *"    # Daily at 2 AM (cron format)
+      retention: "30d"         # Keep backups for 30 days
+    
+    - type: "configs"         # Backup configuration files
+      enabled: true
+      schedule: "0 3 * * *"    # Daily at 3 AM
+      retention: "90d"         # Keep config backups for 90 days
+      
+    - type: "logs"            # Backup log files
+      enabled: false
+      schedule: "0 4 * * 0"    # Weekly on Sunday at 4 AM
+      retention: "14d"         # Keep log backups for 14 day
 
-```
-- type: "s3"
-  bucket: "cv-platform-backups"
-  prefix: "prod/"
-```
+  # Backup destinations
 
-# Recovery settings
+  destinations:
+    - type: "local"
+      path: "./backups"
 
-recovery:
-auto_recovery: false      # Enable automatic recovery
-recovery_point_objective: “1h”  # Maximum acceptable data loss
-recovery_time_objective: “30m”  # Maximum acceptable downtime
+    - type: "s3"
+      bucket: "cv-platform-backups"
+      prefix: "prod/"
+
+  # Recovery settings
+
+  recovery:
+    auto_recovery: false      # Enable automatic recovery
+    recovery_point_objective: "1h"  # Maximum acceptable data loss
+    recovery_time_objective: "30m"  # Maximum acceptable downtime
 
 # =============================================================================
 
@@ -529,51 +510,51 @@ recovery_time_objective: “30m”  # Maximum acceptable downtime
 # Environment-specific configurations
 
 environments:
-development:
-platform:
-debug: true
-api:
-workers: 1
-cors:
-allow_origins: [”*”]
-logging:
-level: “DEBUG”
-cache:
-ttl: 300               # Shorter TTL for development
+  development:
+    platform:
+      debug: true
+    api:
+      workers: 1
+      cors:
+        allow_origins: ["*"]
+    logging:
+      level: "DEBUG"
+    cache:
+      ttl: 300               # Shorter TTL for development
 
-staging:
-platform:
-debug: false
-api:
-workers: 2
-logging:
-level: “INFO”
-monitoring:
-health:
-enabled: true
+  staging:
+    platform:
+      debug: false
+    api:
+      workers: 2
+    logging:
+      level: "INFO"
+    monitoring:
+      health:
+        enabled: true
 
-production:
-platform:
-debug: false
-environment: “production”
-api:
-workers: 4
-cors:
-allow_origins: [“https://your-domain.com”]
-security:
-require_api_key: true
-logging:
-level: “WARNING”
-file:
-rotation: “100 MB”
-retention: “90 days”
-cache:
-max_size: “8GB”
-max_models: 5
-monitoring:
-metrics:
-enabled: true
-tracing:
-enabled: true
-backup:
-enabled: true
+  production:
+    platform:
+      debug: false
+      environment: "production"
+    api:
+    workers: 4
+    cors:
+      allow_origins: ["https://your-domain.com"]
+    security:
+      require_api_key: true
+    logging:
+    level: "WARNING"
+    file:
+      rotation: "100 MB"
+      retention: "90 days"
+    cache:
+      max_size: "8GB"
+      max_models: 5
+    monitoring:
+      metrics:
+        enabled: true
+      tracing:
+        enabled: true
+    backup:
+      enabled: true
