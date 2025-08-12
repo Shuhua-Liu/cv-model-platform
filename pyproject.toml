@@ -184,12 +184,12 @@ full = [
 # 🚀 Project URLs
 # ===============================================
 [project.urls]
-Homepage = "https://github.com/yourusername/cv-model-platform"
+Homepage = "https://github.com/Shuhua-Liu/cv-model-platform"
 Documentation = "https://cv-model-platform.readthedocs.io/"
-Repository = "https://github.com/yourusername/cv-model-platform.git"
-"Issue Tracker" = "https://github.com/yourusername/cv-model-platform/issues"
-Changelog = "https://github.com/yourusername/cv-model-platform/blob/main/CHANGELOG.md"
-"Release Notes" = "https://github.com/yourusername/cv-model-platform/releases"
+Repository = "https://github.com/Shuhua-Liu/cv-model-platform.git"
+"Issue Tracker" = "https://github.com/Shuhua-Liu/cv-model-platform/issues"
+Changelog = "https://github.com/Shuhua-Liu/cv-model-platform/blob/main/CHANGELOG.md"
+"Release Notes" = "https://github.com/Shuhua-Liu/cv-model-platform/releases"
 
 # ===============================================
 # 🎯 Console Scripts

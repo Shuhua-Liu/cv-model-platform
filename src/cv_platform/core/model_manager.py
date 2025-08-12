@@ -1,7 +1,7 @@
 """
-模型管理器 - 统一管理所有模型的加载、缓存和调用
+Model Manager - Centrally manages the loading, caching, and calling of all models.
 
-提供模型的统一接口，处理模型加载、缓存、设备管理等。
+Provides a unified model interface, handling model loading, caching, device management, and more.
 """
 
 from typing import Dict, List, Any, Optional, Union
@@ -18,54 +18,54 @@ from ..adapters.base import BaseModelAdapter
 
 
 class ModelCache:
-    """模型缓存管理"""
+    """Model cache management"""
     
     def __init__(self, max_size: int = 3, ttl: int = 3600):
         """
-        初始化模型缓存
-        
+        Initialize the model cache
+
         Args:
-            max_size: 最大缓存模型数量
-            ttl: 缓存生存时间（秒）
+            max_size: Maximum number of cached models
+            ttl: Cache lifetime (seconds)
         """
         self.max_size = max_size
         self.ttl = ttl
         self._cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self._lock = threading.RLock()
         
-        logger.info(f"模型缓存初始化 - 最大数量: {max_size}, TTL: {ttl}s")
+        logger.info(f"Model cache initialization - maximum number: {max_size}, TTL: {ttl}s")
     
     def get(self, model_name: str) -> Optional[BaseModelAdapter]:
-        """获取缓存的模型"""
+        """Get the cached model"""
         with self._lock:
             if model_name not in self._cache:
                 return None
             
             cache_entry = self._cache[model_name]
             
-            # 检查TTL
+            # Check TTL
             if time.time() - cache_entry['timestamp'] > self.ttl:
-                logger.debug(f"模型缓存过期: {model_name}")
+                logger.debug(f"Model cache expires: {model_name}")
                 self._remove(model_name)
                 return None
             
-            # 移到最近使用位置
+            # Move to recently used location
             self._cache.move_to_end(model_name)
             cache_entry['last_accessed'] = time.time()
             cache_entry['access_count'] += 1
             
-            logger.debug(f"命中模型缓存: {model_name}")
+            logger.debug(f"Hitting the model cache: {model_name}")
             return cache_entry['adapter']
     
     def put(self, model_name: str, adapter: BaseModelAdapter) -> None:
-        """缓存模型"""
+        """Cache Model"""
         with self._lock:
-            # 如果缓存已满，移除最久未使用的模型
+            # If the cache is full, remove the least recently used model
             while len(self._cache) >= self.max_size:
                 oldest_model = next(iter(self._cache))
                 self._remove(oldest_model)
             
-            # 添加到缓存
+            # Add to Cache
             self._cache[model_name] = {
                 'adapter': adapter,
                 'timestamp': time.time(),
@@ -73,15 +73,15 @@ class ModelCache:
                 'access_count': 1
             }
             
-            logger.info(f"模型已缓存: {model_name}")
+            logger.info(f"Model cached: {model_name}")
     
     def remove(self, model_name: str) -> None:
-        """从缓存中移除模型"""
+        """Remove the model from the cache"""
         with self._lock:
             self._remove(model_name)
     
     def _remove(self, model_name: str) -> None:
-        """内部移除方法"""
+        """Internal removal method"""
         if model_name in self._cache:
             cache_entry = self._cache.pop(model_name)
             adapter = cache_entry['adapter']
@@ -89,20 +89,20 @@ class ModelCache:
             try:
                 adapter.unload_model()
             except Exception as e:
-                logger.warning(f"卸载模型失败 {model_name}: {e}")
+                logger.warning(f"Unloading model failed {model_name}: {e}")
             
-            logger.info(f"模型已从缓存移除: {model_name}")
+            logger.info(f"Model removed from cache: {model_name}")
     
     def clear(self) -> None:
-        """清空缓存"""
+        """Clear the cache"""
         with self._lock:
             model_names = list(self._cache.keys())
             for model_name in model_names:
                 self._remove(model_name)
-            logger.info("模型缓存已清空")
+            logger.info("Model cache cleared")
     
     def get_cache_stats(self) -> Dict[str, Any]:
-        """获取缓存统计信息"""
+        """Get cache statistics"""
         with self._lock:
             stats = {
                 'cached_models': len(self._cache),
@@ -123,15 +123,15 @@ class ModelCache:
 
 
 class ModelManager:
-    """模型管理器"""
+    """Model Manager"""
     
     def __init__(self):
-        """初始化模型管理器"""
+        """Initialize the model manager"""
         self.config_manager = get_config_manager()
         self.registry = get_registry()
         self.detector = ModelDetector()
         
-        # 初始化缓存
+        # Initialize the cache
         platform_config = self.config_manager.get_platform_config()
         cache_config = platform_config.get('cache', {})
         
@@ -140,28 +140,28 @@ class ModelManager:
         cache_ttl = cache_config.get('ttl', 3600)
         
         if cache_enabled:
-            # 解析缓存大小（如果是字符串格式如"4GB"）
+            # Parsing cache size (if in string format such as "4GB")
             if isinstance(max_cache_size, str) and max_cache_size.endswith('GB'):
-                max_cache_size = 3  # 默认缓存3个模型
+                max_cache_size = 3  # By default, 3 models are cached.
             
             self.cache = ModelCache(max_size=max_cache_size, ttl=cache_ttl)
         else:
             self.cache = None
         
-        # 模型配置
+        # Model Configuration
         self._model_configs = self.config_manager.get_models_config()
         self._available_models = {}
         
-        # 发现和注册模型
+        # Discovering and registering models
         self._discover_models()
         
-        logger.info("模型管理器初始化完成")
+        logger.info("Model manager initialization completed")
     
     def _discover_models(self) -> None:
-        """发现并注册可用模型"""
-        logger.info("开始发现模型...")
+        """Discover and register available models"""
+        logger.info("Start discovering the model...")
         
-        # 从配置文件加载模型
+        # Loading a model from a configuration file
         models_config = self._model_configs.get('models', {})
         for model_name, model_config in models_config.items():
             self._available_models[model_name] = {
@@ -170,12 +170,12 @@ class ModelManager:
                 'source': 'config'
             }
         
-        # 自动发现模型文件
+        # Automatically discover model files
         try:
             detected_models = self.detector.detect_models()
             for model_info in detected_models:
                 if model_info.name not in self._available_models:
-                    # 自动检测适配器
+                    # Automatic adapter detection
                     adapter_name = self.registry.auto_detect_adapter(
                         model_info.path, 
                         model_info.__dict__
@@ -197,16 +197,16 @@ class ModelManager:
                             'model_info': model_info
                         }
         except Exception as e:
-            logger.warning(f"自动发现模型失败: {e}")
+            logger.warning(f"Automatic model discovery failed: {e}")
         
-        logger.info(f"发现 {len(self._available_models)} 个可用模型")
+        logger.info(f"Found {len(self._available_models)} available models")
     
     def list_available_models(self) -> Dict[str, Dict[str, Any]]:
-        """列出所有可用模型"""
+        """List all available models"""
         return self._available_models.copy()
     
     def get_model_info(self, model_name: str) -> Optional[Dict[str, Any]]:
-        """获取模型信息"""
+        """Get model information"""
         return self._available_models.get(model_name)
     
     def load_model(self, 
@@ -214,68 +214,68 @@ class ModelManager:
                    force_reload: bool = False,
                    **kwargs) -> BaseModelAdapter:
         """
-        加载模型
-        
+        Loads a model
+
         Args:
-            model_name: 模型名称
-            force_reload: 是否强制重新加载
-            **kwargs: 传递给适配器的参数
-            
+            model_name: Model name
+            force_reload: Whether to force a reload
+            **kwargs: Parameters passed to the adapter
+
         Returns:
-            模型适配器实例
+            Model adapter instance
         """
-        # 检查缓存
+        # Check the cache
         if not force_reload and self.cache:
             cached_adapter = self.cache.get(model_name)
             if cached_adapter:
-                logger.info(f"使用缓存模型: {model_name}")
+                logger.info(f"Using the cache model: {model_name}")
                 return cached_adapter
         
-        # 获取模型配置
+        # Get model configuration
         model_entry = self._available_models.get(model_name)
         if not model_entry:
-            raise ValueError(f"未找到模型: {model_name}. 可用模型: {list(self._available_models.keys())}")
+            raise ValueError(f"Model not found: {model_name}. Available models:{list(self._available_models.keys())}")
         
         model_config = model_entry['config'].copy()
-        model_config.update(kwargs)  # 运行时参数覆盖配置文件参数
+        model_config.update(kwargs)  # Runtime parameters override configuration file parameters
         
-        # 解析模型路径
+        # Parsing model path
         model_path = model_config['path']
         if isinstance(model_path, str) and '{models_root}' in model_path:
             models_root = self.config_manager.get_models_root()
             model_path = model_path.format(models_root=models_root)
         
-        # 获取适配器名称
+        # Get the adapter name
         adapter_name = model_config.get('adapter')
         if not adapter_name:
-            # 尝试自动检测
+            # Try automatic detection
             model_info = model_entry.get('model_info')
             adapter_name = self.registry.auto_detect_adapter(model_path, model_info.__dict__ if model_info else None)
             
             if not adapter_name:
-                raise ValueError(f"无法确定模型 {model_name} 的适配器类型")
+                raise ValueError(f"Unable to determine adapter type for model {model_name}")
         
-        # 创建适配器实例
+        # Creating an Adapter Instance
         try:
-            logger.info(f"加载模型: {model_name} (适配器: {adapter_name})")
+            logger.info(f"Load model: {model_name} (adapter: {adapter_name})")
             adapter = self.registry.create_adapter(
                 model_path=model_path,
                 adapter_name=adapter_name,
                 **{k: v for k, v in model_config.items() if k not in ['path', 'adapter']}
             )
             
-            # 加载模型到内存
+            # Load the model into memory
             adapter.load_model()
             
-            # 缓存模型
+            # Cache Model
             if self.cache:
                 self.cache.put(model_name, adapter)
             
-            logger.info(f"模型加载成功: {model_name}")
+            logger.info(f"Model loaded successfully: {model_name}")
             return adapter
             
         except Exception as e:
-            logger.error(f"加载模型失败 {model_name}: {e}")
+            logger.error(f"Model loaded failed {model_name}: {e}")
             raise
     
     def predict(self, 
@@ -283,46 +283,46 @@ class ModelManager:
                 input_data: Any,
                 **kwargs) -> Any:
         """
-        使用模型进行预测
-        
+       Use the model to make predictions
+
         Args:
-            model_name: 模型名称
-            input_data: 输入数据
-            **kwargs: 预测参数
-            
+            model_name: Model name
+            input_data: Input data
+            **kwargs: Prediction parameters
+
         Returns:
-            预测结果
+            Prediction results
         """
         adapter = self.load_model(model_name)
         return adapter.predict(input_data, **kwargs)
     
     def unload_model(self, model_name: str) -> None:
-        """卸载模型"""
+        """Unload model"""
         if self.cache:
             self.cache.remove(model_name)
-        logger.info(f"模型已卸载: {model_name}")
+        logger.info(f"Model Unloaded: {model_name}")
     
     def clear_cache(self) -> None:
-        """清空模型缓存"""
+        """Clear the model cache"""
         if self.cache:
             self.cache.clear()
     
     def get_cache_stats(self) -> Dict[str, Any]:
-        """获取缓存统计信息"""
+        """Get cache statistics"""
         if self.cache:
             return self.cache.get_cache_stats()
         return {"cache_enabled": False}
     
     def reload_configs(self) -> None:
-        """重新加载配置"""
-        logger.info("重新加载模型配置...")
+        """Reload configuration"""
+        logger.info("Reload model configuration...")
         self.config_manager.reload_configs()
         self._model_configs = self.config_manager.get_models_config()
         self.clear_cache()
         self._discover_models()
     
     def validate_models(self) -> Dict[str, Dict[str, Any]]:
-        """验证所有模型的可用性"""
+        """Verify the availability of all models"""
         validation_results = {}
         
         for model_name, model_entry in self._available_models.items():
@@ -337,29 +337,29 @@ class ModelManager:
                 model_config = model_entry['config']
                 model_path = model_config['path']
                 
-                # 解析路径
+                # Parsing Path
                 if isinstance(model_path, str) and '{models_root}' in model_path:
                     models_root = self.config_manager.get_models_root()
                     model_path = model_path.format(models_root=models_root)
                 
-                # 检查文件是否存在
+                # Check if a file exists
                 if not model_path.startswith('torchvision://') and not Path(model_path).exists():
-                    result['errors'].append(f"模型文件不存在: {model_path}")
+                    result['errors'].append(f"Model file does not exist: {model_path}")
                     result['status'] = 'error'
                     continue
                 
-                # 检查适配器是否可用
+                # Check if the adapter is available
                 adapter_name = model_config.get('adapter')
                 if adapter_name and not self.registry.get_adapter_class(adapter_name):
-                    result['errors'].append(f"适配器不可用: {adapter_name}")
+                    result['errors'].append(f"Adapter not available: {adapter_name}")
                     result['status'] = 'error'
                     continue
                 
-                # 尝试创建适配器（不加载模型）
+                # Try creating the adapter (without loading the model)
                 if adapter_name:
                     adapter_class = self.registry.get_adapter_class(adapter_name)
                     if adapter_class:
-                        # 简单的实例化测试
+                        # Simple instantiation test
                         test_adapter = adapter_class(model_path=model_path, device='cpu')
                         result['status'] = 'valid'
                     
@@ -372,7 +372,7 @@ class ModelManager:
         return validation_results
     
     def get_system_status(self) -> Dict[str, Any]:
-        """获取系统状态"""
+        """Get system status"""
         import torch
         import psutil
         
@@ -393,7 +393,7 @@ class ModelManager:
             }
         }
         
-        # GPU信息
+        # GPU information
         if torch.cuda.is_available():
             gpu_info = []
             for i in range(torch.cuda.device_count()):
@@ -409,11 +409,11 @@ class ModelManager:
         return status
 
 
-# 全局模型管理器实例
+# Global Model Manager Instance
 _model_manager = None
 
 def get_model_manager() -> ModelManager:
-    """获取全局模型管理器实例"""
+    """Get the global model manager instance"""
     global _model_manager
     if _model_manager is None:
         _model_manager = ModelManager()
