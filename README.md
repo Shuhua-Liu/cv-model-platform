@@ -6,37 +6,37 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Codecov](https://codecov.io/gh/yourusername/cv-model-platform/branch/main/graph/badge.svg)](https://codecov.io/gh/yourusername/cv-model-platform)
 
-**一个统一的计算机视觉模型管理和部署平台，支持检测、分割、分类、生成等多种CV任务。**
+**A unified computer vision model management and deployment platform supporting various CV tasks such as detection, segmentation, classificatgion, and generation.**
 
-## ✨ 核心特性
+## ✨ Core Features
 
-🎯 **统一接口** - 一套API适配多种CV模型（YOLO、SAM、Stable Diffusion等）  
-🚀 **开箱即用** - 一条命令完成环境设置和模型发现  
-🔧 **智能配置** - 自动发现本地模型，无需手动配置  
-🌍 **跨平台** - 完美支持Windows和Linux系统  
-⚡ **高性能** - GPU加速，批处理，模型缓存优化  
-🔌 **易扩展** - 插件化架构，轻松添加新模型支持  
-📡 **多接口** - REST API、Python SDK、Web界面  
-🐳 **容器化** - Docker支持，云原生部署  
+🎯 **Unified Interface** - A single API adapts to multiple CV models (YOLO, SAM, Stable Diffusion, etc.)  
+🚀 **Out-of-the-box** - One command completes environment setup and model discovery  
+🔧 **Intelligent Configuration** - Automatically discovers local models without manual configuration  
+🌍 **Cross-platform** - Perfect support for Windows and Linux systems  
+⚡ **High Performance** - GPU acceleration, batch processing, model cache optimization  
+🔌 **Easy Extensibility** - Plugin architecture, easily add new model support  
+📡 **Multiple Interfaces** - REST API、Python SDK、Web Interface  
+🐳 **Containerization** - Docker support, cloud-native deployment  
 
-## 🎬 快速演示
+## 🎬 Quick Demo
 
 ```python
 from cv_platform.client import CVPlatformClient
 
-# 创建客户端
+# Create client
 client = CVPlatformClient()
 
-# 目标检测
+# Object detection
 results = client.predict("yolov8n", "image.jpg")
-print(f"检测到 {len(results)} 个对象")
+print(f"Detected {len(results)} objects")
 
-# Image Segmentation
+# Image segmentation
 masks = client.predict("sam_vit_h", "image.jpg")
 
-# 图像生成
-generated = client.predict("stable_diffusion", 
-                         prompt="a beautiful sunset over mountains")
+# Image generation
+generated = client.predict("stable_diffusion",
+                           prompt="a beautiful sunset over mountains")
 ```
 
 ## 🚀 Quick Start
@@ -44,43 +44,45 @@ generated = client.predict("stable_diffusion",
 ### Method 1: One-Click Install (Recommended)
 
 ```bash
-# 1. 克隆项目
+# 1. Clone the project
 git clone https://github.com/Shuhua-Liu/cv-model-platform.git
 cd cv-model-platform
 
-# 2. 一条命令完成所有设置
+# 2. Complete all setup with one command
 python scripts/setup/setup_environment.py
 
-# 3. 立即使用
+# 3. Use immediately
 python examples/basic_usage/detection_demo.py
 ```
 
-### 方法二：手动安装
+### Method 2: Manual Installation
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 pip install -e .
 
-# 发现本地模型
+# Discover local models
 python scripts/models/detect_models.py
 
-# 启动服务
+# Start service
 python -m cv_platform.api.rest_api
 ```
 
-📖 **详细教程**: [快速开始指南](QUICKSTART.md)
+📖 **Detailed tutorial**: [Quick Start Guide](QUICKSTART.md)
 
-## 📁 模型文件组织
+## 📁 Model File Organization
 
-平台会自动搜索以下位置的模型文件：
+The platform automatically searches for model files in the following locations:
 
 ```
-~/cv_models/  # 推荐的模型存放位置
+~/cv_models/  # Recommended model storage location
 ├── detection/
 │   ├── yolo/
-│   │   ├── yolov8n.pt
-│   │   └── yolov8s.pt
+│   │   ├──v8/
+│   │   │   ├── yolov8n.pt
+│   │   │   └── yolov8s.pt
+│   │   └──v11/
 │   └── detectron2/
 ├── segmentation/
 │   ├── sam/
@@ -89,7 +91,7 @@ python -m cv_platform.api.rest_api
 │   └── mask2former/
 ├── generation/
 │   ├── stable_diffusion/
-│   │   └── v1-5-pruned-emaonly.safetensors
+│   │   └── v1-5/
 │   └── flux/
 ├── classification/
 │   └── resnet/
@@ -97,27 +99,27 @@ python -m cv_platform.api.rest_api
     └── clip/
 ```
 
-## 🎯 支持的模型类型
+## 🎯 Supported Model Types
 
-| 类别 | 支持的模型 | 状态 |
+| Category | Supported Models | Status |
 |------|------------|------|
-| **检测** | YOLOv8/v9, Detectron2, RT-DETR | ✅ |
-| **分割** | SAM, Mask2Former, DeepLabV3 | ✅ |
-| **分类** | ResNet, EfficientNet, ViT | ✅ |
-| **生成** | Stable Diffusion, FLUX, ControlNet | ✅ |
-| **多模态** | CLIP, BLIP, LLaVA | 🚧 |
+| **Detection** | YOLOv8/v9, Detectron2, RT-DETR | ✅ |
+| **Segmentation** | SAM, Mask2Former, DeepLabV3 | ✅ |
+| **Classification** | ResNet, EfficientNet, ViT | ✅ |
+| **Generation** | Stable Diffusion, FLUX, ControlNet | ✅ |
+| **Multimodal** | CLIP, BLIP, LLaVA | 🚧 |
 
-完整兼容性列表：[模型兼容性矩阵](docs/compatibility_matrix.md)
+Full compatibility list: [Model Compatibility Matrix](docs/compatibility_matrix.md)
 
-## 🌐 API使用
+## 🌐 API Usage
 
 ### REST API
 
 ```bash
-# 启动API服务
+# Start API service
 python -m cv_platform.api.rest_api
 
-# 使用API
+# Use API
 curl -X POST "http://localhost:8000/predict/yolov8n" \
      -H "Content-Type: multipart/form-data" \
      -F "image=@test_image.jpg"
@@ -128,11 +130,11 @@ curl -X POST "http://localhost:8000/predict/yolov8n" \
 ```python
 from cv_platform.client import CVPlatformClient
 
-# 同步客户端
+# Synchronous client
 client = CVPlatformClient("http://localhost:8000")
 result = client.predict("yolov8n", "image.jpg")
 
-# 异步客户端
+# Asynchronous client
 import asyncio
 from cv_platform.client import AsyncCVPlatformClient
 
@@ -140,35 +142,35 @@ async def main():
     async with AsyncCVPlatformClient() as client:
         result = await client.predict("sam_vit_h", "image.jpg")
 
-# 批处理客户端
+# Batch client
 from cv_platform.client import BatchCVPlatformClient
 
 batch_client = BatchCVPlatformClient()
 results = batch_client.predict_batch("yolov8n", ["img1.jpg", "img2.jpg"])
 ```
 
-### Web界面
+### Web Interface
 
 ```bash
-# Streamlit界面
+# Streamlit interface
 streamlit run src/cv_platform/web/streamlit_app.py
 
-# Gradio界面
+# Gradio interface
 python src/cv_platform/web/gradio_app.py
 ```
 
-## ⚙️ 高级配置
+## ⚙️ Advanced Configuration
 
-### 环境变量配置
+### Environment Variable Configuration
 
 ```bash
 export CV_MODELS_ROOT="/custom/models/path"
 export CV_MODEL_YOLOV8_PATH="/special/yolo/path.pt"
-export CV_GPU_DEVICES="0,1"  # 指定GPU设备
-export CV_MAX_BATCH_SIZE=8   # 批处理大小
+export CV_GPU_DEVICES="0,1"  # Specify GPU devices
+export CV_MAX_BATCH_SIZE=8   # Batch size
 ```
 
-### 配置文件
+### Configuration File
 
 ```yaml
 # config/models.yaml
@@ -188,88 +190,88 @@ platform:
     max_size: "2GB"
 ```
 
-## 🐳 Docker部署
+## 🐳 Docker Deployment
 
 ```bash
-# 构建镜像
+# Build image
 docker build -t cv-model-platform .
 
-# 运行容器
+# Run container
 docker run -p 8000:8000 -v /path/to/models:/models cv-model-platform
 
-# 使用Docker Compose
+# Use Docker Compose
 docker-compose up -d
 ```
 
-## 🔧 开发和扩展
+## 🔧 Development and Extension
 
-### 添加新模型适配器
+### Add New Model Adaptor
 
 ```python
 from cv_platform.adapters.base import BaseModelAdapter
 
 class MyCustomAdapter(BaseModelAdapter):
     def load_model(self, model_path):
-        # 实现模型加载逻辑
-        pass
-    
-    def predict(self, input_data):
-        # 实现预测逻辑
-        pass
-    
-    def preprocess(self, data):
-        # 实现预处理逻辑
-        pass
-    
-    def postprocess(self, results):
-        # 实现后处理逻辑
+        # Implement model loading logic
         pass
 
-# 注册适配器
+    def predict(self, input_data):
+        # Implement prediction logic
+        pass
+
+    def preprocess(self, data):
+        # Implement preprocessing logic
+        pass
+
+    def postprocess(self, results):
+        # Implement postprocessing logic
+        pass
+
+# Register adapter
 from cv_platform.adapters.registry import register_adapter
 register_adapter("my_model", MyCustomAdapter)
 ```
 
-### 开发插件
+### Develop Plugin
 
 ```python
 from cv_platform.plugins.base import BasePlugin
 
 class MyPlugin(BasePlugin):
     def initialize(self):
-        # 插件初始化逻辑
+        # Plugin initialization logic
         pass
-    
+
     def process(self, data):
-        # 插件处理逻辑
+        # Plugin processing logic
         pass
 ```
 
-## 📊 性能基准
+## 📊 Performance Benchmark
 
-| 模型 | 平台 | 推理时间 | 内存使用 | GPU显存 |
+| Model | Platform | Inference Time | Memory Usage | GPU VRAM |
 |------|------|----------|----------|---------|
-| YOLOv8n | RTX 3080 | 12ms | 256MB | 1.2GB |
-| SAM ViT-H | RTX 3080 | 1.8s | 2.1GB | 8.5GB |
-| SD 1.5 | RTX 3080 | 3.2s | 1.8GB | 6.2GB |
+| YOLOv8n | RTX 6000 Ada | 12ms | 256MB | 1.2GB |
+| SAM ViT-H | RTX 6000 Ada | 1.8s | 2.1GB | 8.5GB |
+| SD 2.1 | RTX 6000 Ada | 3.2s | 1.8GB | 6.2GB |
 
-完整基准测试：[性能报告](docs/benchmarks.md)
+Full benchmark report: [Performance Report](docs/benchmarks.md)
 
 ## 📚 Docs
 
-- 📖 [用户指南](docs/user_guide/)
-- 🔧 [开发者文档](docs/developer_guide/)  
-- 📡 [API参考](docs/api_reference/)
-- 🚀 [部署指南](docs/deployment/)
-- ❓ [常见问题](docs/faq.md)
-- 🐛 [故障排除](docs/troubleshooting.md)
+- 📖 [User Guide](docs/user_guide/)
+- 🔧 [Developer Document](docs/developer_guide/)  
+- 📡 [API Reference](docs/api_reference/)
+- 🚀 [Deployment Guide](docs/deployment/)
+- ❓ [FAQ](docs/faq.md)
+- 🐛 [Troubleshooting](docs/troubleshooting.md)
 
-## 🤝 贡献
+## 🤝 Contribution
 
-我们欢迎任何形式的贡献！
+We welcome contributions of any kind!
 
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+1. Fork the project
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
