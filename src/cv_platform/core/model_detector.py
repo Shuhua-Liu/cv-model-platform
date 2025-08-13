@@ -1,509 +1,452 @@
+"""
+Enhanced Model Detector - Inheriting from BaseManager
+
+Model Detector with full BaseManager integration for state management,
+health monitoring, metrics tracking, and automatic model discovery.
+"""
+
 import os
-import json
-import hashlib
+import time
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple, Set
+from typing import List, Dict, Any, Optional, Tuple, Set
 from dataclasses import dataclass
 from loguru import logger
 
+from .base_manager import BaseManager, ManagerState, HealthStatus, HealthCheckResult
 
-@dataclass 
+
+@dataclass
 class ModelInfo:
-    """Model Information Data Class"""
+    """Model information data structure"""
     name: str
+    path: Path
     type: str  # detection, segmentation, classification, generation, multimodal
-    path: str
-    format: str  # pytorch, safetensors, onnx, tensorrt, huggingface
-    size_mb: float
-    framework: str  # ultralytics, sam, detectron2, diffusers, etc.
-    architecture: str  # yolov8, sam_vit_h, resnet50, stable_diffusion, etc.
-    confidence: float  # Detection confidence (0-1)
-    metadata: Dict[str, Any]  # Additional metadata
+    framework: str  # pytorch, tensorflow, onnx, etc.
+    architecture: str  # yolov8n, resnet50, etc.
+    confidence: float  # detection confidence (0.0-1.0)
+    file_size_mb: float
+    last_modified: float
+    metadata: Dict[str, Any]
 
 
-class ModelDetector:
-    """Automatic Model Discoverer"""
-    
-    # Supported model file extensions
-    SUPPORTED_EXTENSIONS = {
-        '.pt': 'pytorch',
-        '.pth': 'pytorch', 
-        '.ckpt': 'pytorch',
-        '.safetensors': 'safetensors',
-        '.onnx': 'onnx',
-        '.trt': 'tensorrt',
-        '.engine': 'tensorrt',
-        '.bin': 'huggingface',  # HuggingFace binary format
-    }
-    
-    # HuggingFace model identification file
-    HUGGINGFACE_INDICATORS = {
-        'model_index.json',     # Diffusers model
-        'config.json',          # Transformers model 
-        'pytorch_model.bin',    # PyTorch weights
-        'model.safetensors',    # SafeTensors weights
-    }
-    
-    # HuggingFace subcomponent directory (should be skipped)
-    HUGGINGFACE_COMPONENT_DIRS = {
-        'text_encoder', 'text_encoder_2', 'unet', 'vae', 'safety_checker',
-        'feature_extractor', 'scheduler', 'tokenizer', 'image_processor',
-        'controlnet', 'adapter'
-    }
-    
-    # Model name pattern matching
-    MODEL_PATTERNS = {
-        # YOLO detection model
-        'yolo': {
-            'patterns': ['yolov8', 'yolov9', 'yolov10', 'yolo11', 'yolov5'],
-            'type': 'detection',
-            'framework': 'ultralytics'
-        },
-        # SAM segmentation model
-        'sam': {
-            'patterns': ['sam_vit_h', 'sam_vit_l', 'sam_vit_b', 'mobile_sam'],
-            'type': 'segmentation',
-            'framework': 'segment_anything'
-        },
-        # DeepLab segmentation model - Support more variants
-        'deeplabv3': {
-            'patterns': ['deeplabv3_resnet50', 'deeplabv3_resnet101', 'deeplabv3_mobilenet', 'deeplabv3', 'deeplab'],
-            'type': 'segmentation',
-            'framework': 'torchvision'
-        },
-        # Mask2Former segmentation model
-        'mask2former': {
-            'patterns': ['mask2former'],
-            'type': 'segmentation',
-            'framework': 'detectron2'
-        },
-        # U-Net segmentation model
-        'unet': {
-            'patterns': ['unet', 'u_net'],
-            'type': 'segmentation',
-            'framework': 'pytorch'
-        },
-        # ResNet classification model
-        'resnet': {
-            'patterns': ['resnet18-', 'resnet34-', 'resnet50-', 'resnet101-', 'resnet152-'],
-            'type': 'classification',
-            'framework': 'torchvision'
-        },
-        # EfficientNet classification model
-        'efficientnet': {
-            'patterns': ['efficientnet_b0', 'efficientnet_b1', 'efficientnet_b2', 
-                        'efficientnet_b3', 'efficientnet_b4', 'efficientnet_b5',
-                        'efficientnet_b6', 'efficientnet_b7'],
-            'type': 'classification', 
-            'framework': 'timm'
-        },
-        # Stable Diffusion generation model
-        'stable_diffusion': {
-            'patterns': ['v1-5-pruned', 'v2-1', 'sdxl', 'sd_xl', 'stable-diffusion'],
-            'type': 'generation',
-            'framework': 'diffusers'
-        },
-        # CLIP multimodal model
-        'clip': {
-            'patterns': ['clip-vit', 'ViT-B-32', 'ViT-B-16', 'ViT-L-14'],
-            'type': 'multimodal',
-            'framework': 'transformers'
-        }
-    }
+class ModelDetector(BaseManager):
+    """Enhanced Model Detector inheriting from BaseManager"""
     
     def __init__(self, models_root: Optional[Path] = None):
+        """Initialize the model detector with BaseManager capabilities"""
+        super().__init__("ModelDetector")
+        
+        # Core configuration
+        self.models_root = Path(models_root) if models_root else Path("./cv_models")
+        
+        # Detection patterns and rules
+        self.MODEL_PATTERNS = {
+            'yolo': {
+                'patterns': ['yolo', 'yolov8', 'yolov9', 'yolov10', 'yolo11'],
+                'type': 'detection',
+                'framework': 'ultralytics'
+            },
+            'sam': {
+                'patterns': ['sam_vit', 'mobile_sam', 'segment_anything'],
+                'type': 'segmentation',
+                'framework': 'segment_anything'
+            },
+            'stable_diffusion': {
+                'patterns': ['stable-diffusion', 'sd_', 'sdxl', 'flux'],
+                'type': 'generation',
+                'framework': 'diffusers'
+            },
+            'clip': {
+                'patterns': ['clip', 'vit-b-32', 'vit-l-14'],
+                'type': 'multimodal',
+                'framework': 'transformers'
+            },
+            'resnet': {
+                'patterns': ['resnet'],
+                'type': 'classification',
+                'framework': 'torchvision'
+            },
+            'efficientnet': {
+                'patterns': ['efficientnet'],
+                'type': 'classification',
+                'framework': 'torchvision'
+            }
+        }
+        
+        # Supported file extensions
+        self.SUPPORTED_EXTENSIONS = {
+            '.pt', '.pth', '.ckpt', '.safetensors', '.bin', '.pkl',
+            '.h5', '.pb', '.onnx', '.trt', '.engine', '.mlmodel'
+        }
+        
+        # Detection state
+        self._detected_models: List[ModelInfo] = []
+        self._last_scan_time: Optional[float] = None
+        self._scan_in_progress = False
+        
+        logger.info(f"ModelDetector initialized for path: {self.models_root}")
+    
+    def initialize(self) -> bool:
         """
-        Initialize the model detector
+        Initialize detector - implements BaseManager abstract method
+        
+        Returns:
+            True if initialization successful, False otherwise
+        """
+        try:
+            # Validate models root directory
+            if not self.models_root.exists():
+                logger.warning(f"Models root directory does not exist: {self.models_root}")
+                try:
+                    self.models_root.mkdir(parents=True, exist_ok=True)
+                    logger.info(f"Created models root directory: {self.models_root}")
+                except Exception as e:
+                    logger.error(f"Failed to create models root directory: {e}")
+                    return False
+            
+            # Set initial metrics
+            self.update_metric('models_root', str(self.models_root))
+            self.update_metric('supported_extensions', len(self.SUPPORTED_EXTENSIONS))
+            self.update_metric('pattern_groups', len(self.MODEL_PATTERNS))
+            self.update_metric('initialization_time', time.time())
+            
+            # Perform initial scan
+            detected_count = self._perform_model_scan()
+            self.update_metric('initial_scan_models', detected_count)
+            
+            logger.info(f"ModelDetector initialization completed - found {detected_count} models")
+            return True
+            
+        except Exception as e:
+            logger.error(f"ModelDetector initialization failed: {e}")
+            return False
+    
+    def cleanup(self) -> None:
+        """
+        Cleanup detector resources - implements BaseManager abstract method
+        """
+        try:
+            # Clear detected models
+            self._detected_models.clear()
+            
+            # Update final metrics
+            self.update_metric('cleanup_time', time.time())
+            
+            logger.info("ModelDetector cleanup completed")
+            
+        except Exception as e:
+            logger.error(f"Error during ModelDetector cleanup: {e}")
+    
+    def perform_health_check(self) -> HealthCheckResult:
+        """
+        Perform comprehensive health check
+        
+        Returns:
+            Health check result with detailed status
+        """
+        start_time = time.time()
+        
+        try:
+            # Check basic state
+            if self.state not in [ManagerState.RUNNING, ManagerState.READY]:
+                return HealthCheckResult(
+                    status=HealthStatus.CRITICAL,
+                    message=f"ModelDetector not running (state: {self.state.value})",
+                    details={'state': self.state.value},
+                    timestamp=time.time(),
+                    check_duration=time.time() - start_time
+                )
+            
+            # Check models root accessibility
+            models_root_accessible = self.models_root.exists() and os.access(self.models_root, os.R_OK)
+            
+            # Check detected models
+            models_count = len(self._detected_models)
+            last_scan_age = time.time() - self._last_scan_time if self._last_scan_time else float('inf')
+            
+            # Determine health status
+            if not models_root_accessible:
+                status = HealthStatus.CRITICAL
+                message = f"Models root directory not accessible: {self.models_root}"
+            elif self._scan_in_progress:
+                status = HealthStatus.WARNING
+                message = "Model scan in progress"
+            elif last_scan_age > 3600:  # 1 hour
+                status = HealthStatus.WARNING
+                message = f"Last scan was {last_scan_age/3600:.1f} hours ago"
+            elif models_count == 0:
+                status = HealthStatus.WARNING
+                message = "No models detected"
+            else:
+                status = HealthStatus.HEALTHY
+                message = f"{models_count} models detected, last scan {last_scan_age/60:.1f} minutes ago"
+            
+            details = {
+                'models_root_accessible': models_root_accessible,
+                'models_detected': models_count,
+                'last_scan_time': self._last_scan_time,
+                'last_scan_age_minutes': last_scan_age / 60,
+                'scan_in_progress': self._scan_in_progress,
+                'models_root_path': str(self.models_root)
+            }
+            
+            return HealthCheckResult(
+                status=status,
+                message=message,
+                details=details,
+                timestamp=time.time(),
+                check_duration=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return HealthCheckResult(
+                status=HealthStatus.CRITICAL,
+                message=f"Health check failed: {e}",
+                details={'error': str(e)},
+                timestamp=time.time(),
+                check_duration=time.time() - start_time
+            )
+    
+    def detect_models(self, force_rescan: bool = False) -> List[ModelInfo]:
+        """
+        Detect available models with caching and metrics
         
         Args:
-            models_root: The model root directory. By default, the path specified in the configuration manager is used.
+            force_rescan: Force a new scan even if recent data exists
+            
+        Returns:
+            List of detected model information
         """
-        if models_root:
-            self.models_root = Path(models_root)
-        else:
-            from .config_manager import get_config_manager
-            self.models_root = get_config_manager().get_models_root()
+        scan_start_time = time.time()
         
-        # HuggingFace model directory for tracking detected faces
-        self._detected_hf_dirs: Set[Path] = set()
+        # Check if we need to rescan
+        if not force_rescan and self._detected_models and self._last_scan_time:
+            scan_age = time.time() - self._last_scan_time
+            if scan_age < 300:  # 5 minutes cache
+                logger.debug(f"Using cached model detection results (age: {scan_age:.1f}s)")
+                self.increment_metric('cache_hits')
+                return self._detected_models.copy()
         
-        logger.info(f"Initialize the model detector - root directory: {self.models_root}")
+        # Perform new scan
+        self.increment_metric('scans_performed')
+        detected_count = self._perform_model_scan()
+        
+        scan_duration = time.time() - scan_start_time
+        self.update_metric('last_scan_duration', scan_duration)
+        self.update_metric('last_scan_models_found', detected_count)
+        
+        logger.info(f"Model detection completed in {scan_duration:.2f}s - found {detected_count} models")
+        
+        return self._detected_models.copy()
     
-    def detect_models(self, 
-                     include_patterns: Optional[List[str]] = None,
-                     exclude_patterns: Optional[List[str]] = None,
-                     min_size_mb: float = 0.1,
-                     max_size_mb: float = 50000) -> List[ModelInfo]:
+    def _perform_model_scan(self) -> int:
         """
-        Check all available models
+        Perform the actual model scanning
+        
+        Returns:
+            Number of models detected
         """
-        logger.info("Start scanning the model file...")
+        if self._scan_in_progress:
+            logger.warning("Model scan already in progress")
+            return len(self._detected_models)
         
-        if not self.models_root.exists():
-            logger.warning(f"The model root directory does not exist: {self.models_root}")
-            return []
+        self._scan_in_progress = True
+        scan_start_time = time.time()
         
-        detected_models = []
-        self._detected_hf_dirs.clear()  # Reset HuggingFace directory tracking
-        
-        # Step 1: Detect the HuggingFace format model
-        hf_models = self._detect_all_huggingface_models()
-        detected_models.extend(hf_models)
-        
-        # Step 2: Scan for other format models in each category directory
-        for category_dir in self.models_root.iterdir():
-            if not category_dir.is_dir():
-                continue
-                
-            logger.debug(f"Scan directory: {category_dir}")
-            category_models = self._scan_directory(
-                category_dir, 
-                include_patterns, 
-                exclude_patterns,
-                min_size_mb,
-                max_size_mb
-            )
-            detected_models.extend(category_models)
-        
-        # Sort by confidence and file size
-        detected_models.sort(key=lambda x: (x.confidence, x.size_mb), reverse=True)
-        
-        logger.info(f"Model scan completed - {len(detected_models)} models found")
-        return detected_models
-    
-    def _detect_all_huggingface_models(self) -> List[ModelInfo]:
-        """Detect all HuggingFace format models"""
-        hf_models = []
-        
-        for root, dirs, files in os.walk(self.models_root):
-            root_path = Path(root)
-            
-            # Skip subdirectories of HuggingFace directories that have already been detected
-            if any(root_path.is_relative_to(hf_dir) and root_path != hf_dir 
-                   for hf_dir in self._detected_hf_dirs):
-                continue
-            
-            # Check if it is the HuggingFace model directory
-            if self._is_huggingface_model_dir(root_path):
-                hf_model = self._detect_huggingface_model(root_path)
-                if hf_model:
-                    hf_models.append(hf_model)
-                    self._detected_hf_dirs.add(root_path)
-                    logger.info(f"HuggingFace model detected: {hf_model.name} at {root_path}")
-        
-        return hf_models
-    
-    def _is_huggingface_model_dir(self, dir_path: Path) -> bool:
-        """Determine whether the directory is a HuggingFace model directory"""
-        # Check whether the identification file of the HuggingFace model is included
-        for indicator in self.HUGGINGFACE_INDICATORS:
-            if (dir_path / indicator).exists():
-                return True
-        return False
-    
-    def _scan_directory(self, 
-                       directory: Path,
-                       include_patterns: Optional[List[str]],
-                       exclude_patterns: Optional[List[str]], 
-                       min_size_mb: float,
-                       max_size_mb: float) -> List[ModelInfo]:
-        """Scan the specified directory (skip the internal files of the HuggingFace model)"""
-        models = []
-        
-        # Recursively scan all files
-        for file_path in directory.rglob('*'):
-            if not file_path.is_file():
-                continue
-            
-            # Skip files in the HuggingFace model directory
-            if self._is_inside_huggingface_model(file_path):
-                continue
-            
-            # Skip files in the HuggingFace component subdirectory
-            if self._is_huggingface_component_file(file_path):
-                continue
-            
-            # Check the file extension
-            if file_path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
-                continue
-            
-            # Check file size
-            try:
-                size_mb = file_path.stat().st_size / (1024 * 1024)
-                if size_mb < min_size_mb or size_mb > max_size_mb:
-                    continue
-            except OSError:
-                logger.warning(f"Unable to read file size: {file_path}")
-                continue
-            
-            # Apply include/exclude patterns
-            if include_patterns and not any(pattern in file_path.name for pattern in include_patterns):
-                continue
-            if exclude_patterns and any(pattern in file_path.name for pattern in exclude_patterns):
-                continue
-            
-            # Detect model information
-            model_info = self._analyze_model_file(file_path)
-            if model_info:
-                models.append(model_info)
-        
-        return models
-    
-    def _is_inside_huggingface_model(self, file_path: Path) -> bool:
-        """Check if the file is in the detected HuggingFace model directory"""
-        for hf_dir in self._detected_hf_dirs:
-            try:
-                file_path.relative_to(hf_dir)
-                return True
-            except ValueError:
-                continue
-        return False
-    
-    def _is_huggingface_component_file(self, file_path: Path) -> bool:
-        """Check if the file is in the HuggingFace component subdirectory"""
-        for parent in file_path.parents:
-            if parent.name in self.HUGGINGFACE_COMPONENT_DIRS:
-                # Further check whether the parent directory may be a HuggingFace model
-                for ancestor in parent.parents:
-                    if self._is_huggingface_model_dir(ancestor):
-                        return True
-        return False
-    
-    def _detect_huggingface_model(self, model_dir: Path) -> Optional[ModelInfo]:
-        """Detecting HuggingFace format models"""
         try:
-            # Prioritize checking the diffusers model (with model_index.json)
-            model_index_file = model_dir / 'model_index.json'
-            if model_index_file.exists():
-                return self._detect_diffusers_model(model_dir, model_index_file)
+            logger.info(f"Starting model scan in: {self.models_root}")
             
-            # Check transformers model (with config.json)
-            config_file = model_dir / 'config.json'
-            if config_file.exists():
-                return self._detect_transformers_model(model_dir, config_file)
+            detected_models = []
+            scanned_files = 0
             
-            # Check if it is just the directory containing the weights file
-            if any((model_dir / f).exists() for f in ['pytorch_model.bin', 'model.safetensors']):
-                return self._detect_generic_hf_model(model_dir)
+            # Walk through directory tree
+            for root_path in self._walk_model_directories():
+                for file_path in root_path.rglob("*"):
+                    if file_path.is_file() and file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS:
+                        scanned_files += 1
+                        
+                        try:
+                            model_info = self._analyze_model_file(file_path)
+                            if model_info and model_info.confidence > 0.5:  # Confidence threshold
+                                detected_models.append(model_info)
+                                logger.debug(f"Detected model: {model_info.name} ({model_info.type}/{model_info.framework})")
+                        
+                        except Exception as e:
+                            logger.warning(f"Failed to analyze model file {file_path}: {e}")
             
-            return None
+            # Update state
+            self._detected_models = detected_models
+            self._last_scan_time = time.time()
             
-        except Exception as e:
-            logger.warning(f"Failed to detect HuggingFace model {model_dir}: {e}")
-            return None
+            # Update metrics
+            self.update_metric('files_scanned', scanned_files)
+            self.update_metric('models_detected', len(detected_models))
+            self.update_metric('scan_success_rate', len(detected_models) / max(scanned_files, 1))
+            
+            logger.info(f"Scan completed: {scanned_files} files scanned, {len(detected_models)} models detected")
+            
+            return len(detected_models)
+            
+        finally:
+            self._scan_in_progress = False
     
-    def _detect_diffusers_model(self, model_dir: Path, model_index_file: Path) -> Optional[ModelInfo]:
-        """Detect Diffusers models (such as Stable Diffusion)"""
-        try:
-            with open(model_index_file, 'r', encoding='utf-8') as f:
-                model_index = json.load(f)
-            
-            # Calculate the total size of a directory
-            total_size = self._calculate_directory_size(model_dir)
-            size_mb = total_size / (1024 * 1024)
-            
-            # Inference model type and architecture
-            model_type = 'generation'
-            framework = 'diffusers'
-            
-            dir_name = model_dir.name.lower()
-            if 'sdxl' in dir_name or 'xl' in dir_name:
-                architecture = 'stable_diffusion_xl'
-            elif 'flux' in dir_name:
-                architecture = 'flux'
-            elif 'controlnet' in dir_name:
-                architecture = 'controlnet'
-            else:
-                architecture = 'stable_diffusion'
-            
-            model_name = model_dir.name
-            
-            metadata = {
-                'model_index': model_index,
-                'huggingface_format': True,
-                'diffusers_model': True,
-                'components': list(model_index.keys()) if isinstance(model_index, dict) else []
-            }
-            
-            return ModelInfo(
-                name=model_name,
-                type=model_type,
-                path=str(model_dir),
-                format='huggingface',
-                size_mb=size_mb,
-                framework=framework,
-                architecture=architecture,
-                confidence=0.95,  # High confidence, because there is a clear model_index.json
-                metadata=metadata
-            )
-            
-        except Exception as e:
-            logger.warning(f"Failed to detect Diffusers model {model_dir}: {e}")
-            return None
-    
-    def _detect_transformers_model(self, model_dir: Path, config_file: Path) -> Optional[ModelInfo]:
-        """Detecting Transformers models (such as CLIP, BERT, etc.)"""
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            total_size = self._calculate_directory_size(model_dir)
-            size_mb = total_size / (1024 * 1024)
-            
-            # Infer model type based on config
-            model_type = 'multimodal'  # default
-            framework = 'transformers'
-            architecture = 'unknown'
-            
-            # Inferring concrete types based on schema information
-            arch = config.get('architectures', [''])[0].lower() if config.get('architectures') else ''
-            model_type_from_config = config.get('model_type', '').lower()
-            
-            if 'clip' in arch or 'clip' in model_type_from_config:
-                model_type = 'multimodal'
-                architecture = 'clip'
-            elif 'bert' in arch or 'bert' in model_type_from_config:
-                model_type = 'text'
-                architecture = 'bert'
-            elif 'gpt' in arch or 'gpt' in model_type_from_config:
-                model_type = 'text'
-                architecture = 'gpt'
-            
-            model_name = model_dir.name
-            
-            metadata = {
-                'config': config,
-                'huggingface_format': True,
-                'transformers_model': True,
-                'architecture_from_config': arch
-            }
-            
-            return ModelInfo(
-                name=model_name,
-                type=model_type,
-                path=str(model_dir),
-                format='huggingface',
-                size_mb=size_mb,
-                framework=framework,
-                architecture=architecture,
-                confidence=0.9,
-                metadata=metadata
-            )
-            
-        except Exception as e:
-            logger.warning(f"Detection of Transformers model failed {model_dir}: {e}")
-            return None
-    
-    def _detect_generic_hf_model(self, model_dir: Path) -> Optional[ModelInfo]:
-        """Detecting the generic HuggingFace model (weights file only)"""
-        try:
-            total_size = self._calculate_directory_size(model_dir)
-            size_mb = total_size / (1024 * 1024)
-            
-            model_name = model_dir.name
-            
-            # Inferred based on directory name
-            dir_name = model_name.lower()
-            if 'diffusion' in dir_name or 'sd' in dir_name:
-                model_type = 'generation'
-                architecture = 'stable_diffusion'
-            elif 'clip' in dir_name:
-                model_type = 'multimodal'
-                architecture = 'clip'
-            else:
-                model_type = 'unknown'
-                architecture = 'unknown'
-            
-            metadata = {
-                'huggingface_format': True,
-                'generic_hf_model': True
-            }
-            
-            return ModelInfo(
-                name=model_name,
-                type=model_type,
-                path=str(model_dir),
-                format='huggingface',
-                size_mb=size_mb,
-                framework='huggingface',
-                architecture=architecture,
-                confidence=0.7,  # Medium confidence
-                metadata=metadata
-            )
-            
-        except Exception as e:
-            logger.warning(f"Detection of generic HuggingFace model fails {model_dir}: {e}")
-            return None
-    
-    def _calculate_directory_size(self, directory: Path) -> int:
-        """Calculate the total size of a directory"""
-        total_size = 0
-        try:
-            for file_path in directory.rglob('*'):
-                if file_path.is_file():
-                    total_size += file_path.stat().st_size
-        except Exception as e:
-            logger.debug(f"Failed to calculate directory size {directory}: {e}")
-        return total_size
+    def _walk_model_directories(self) -> List[Path]:
+        """
+        Get list of directories to scan for models
+        
+        Returns:
+            List of directory paths to scan
+        """
+        directories_to_scan = [self.models_root]
+        
+        # Add common subdirectories if they exist
+        common_subdirs = [
+            'detection', 'segmentation', 'classification', 'generation', 'multimodal',
+            'yolo', 'sam', 'stable_diffusion', 'clip', 'resnet', 'efficientnet'
+        ]
+        
+        for subdir in common_subdirs:
+            subdir_path = self.models_root / subdir
+            if subdir_path.exists() and subdir_path.is_dir():
+                directories_to_scan.append(subdir_path)
+        
+        return directories_to_scan
     
     def _analyze_model_file(self, file_path: Path) -> Optional[ModelInfo]:
-        """Analyzing a single model file"""
+        """
+        Analyze a model file and extract information
+        
+        Args:
+            file_path: Path to the model file
+            
+        Returns:
+            ModelInfo if analysis successful, None otherwise
+        """
         try:
-            # Get basic information
-            size_mb = file_path.stat().st_size / (1024 * 1024)
-            file_format = self.SUPPORTED_EXTENSIONS.get(file_path.suffix.lower(), 'unknown')
+            # Get basic file information
+            stat = file_path.stat()
+            file_size_mb = stat.st_size / (1024 * 1024)
             
-            # Inference model types and frameworks
-            model_type, framework, architecture, confidence = self._infer_model_properties(file_path)
+            # Generate model name from file path
+            model_name = self._generate_model_name(file_path)
             
-            # Generate model name
-            model_name = self._generate_model_name(file_path, architecture)
+            # Detect model type, framework, and architecture
+            model_type, framework, architecture, confidence = self._detect_model_characteristics(file_path)
             
-            # Collect metadata
-            metadata = self._collect_metadata(file_path)
+            # Extract metadata
+            metadata = self._extract_metadata(file_path)
             
             return ModelInfo(
                 name=model_name,
+                path=file_path,
                 type=model_type,
-                path=str(file_path),
-                format=file_format,
-                size_mb=size_mb,
                 framework=framework,
                 architecture=architecture,
                 confidence=confidence,
+                file_size_mb=file_size_mb,
+                last_modified=stat.st_mtime,
                 metadata=metadata
             )
             
         except Exception as e:
-            logger.warning(f"Failed to analyze the model file {file_path}: {e}")
+            logger.warning(f"Failed to analyze model file {file_path}: {e}")
             return None
     
-    def _infer_model_properties(self, file_path: Path) -> Tuple[str, str, str, float]:
-        """Inferring model properties"""
+    def _generate_model_name(self, file_path: Path) -> str:
+        """
+        Generate a unique model name from file path
+        
+        Args:
+            file_path: Path to the model file
+            
+        Returns:
+            Generated model name
+        """
+        # Use relative path from models root
+        try:
+            relative_path = file_path.relative_to(self.models_root)
+            # Remove file extension and use path structure
+            name_parts = list(relative_path.parent.parts) + [relative_path.stem]
+            # Filter out common directory names
+            filtered_parts = [part for part in name_parts if part not in ['.', 'models', 'weights', 'checkpoints']]
+            
+            if filtered_parts:
+                return '_'.join(filtered_parts)
+            else:
+                return file_path.stem
+                
+        except ValueError:
+            # File is not under models_root
+            return file_path.stem
+    
+    def _detect_model_characteristics(self, file_path: Path) -> Tuple[str, str, str, float]:
+        """
+        Detect model type, framework, and architecture from file path and name
+        
+        Args:
+            file_path: Path to the model file
+            
+        Returns:
+            Tuple of (type, framework, architecture, confidence)
+        """
         filename = file_path.name.lower()
-        parent_dirs = [p.name.lower() for p in file_path.parents]
+        parent_dirs = [p.lower() for p in file_path.parent.parts]
         
-        # Special handling: Prioritize checking for explicit model patterns
-        # Exact Matching of the YOLO Model
-        yolo_variants = ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x',
-                        'yolov9c', 'yolov9e', 'yolov10n', 'yolov10s', 'yolov10m', 'yolov10l', 'yolov10x',
-                        'yolo11n', 'yolo11s', 'yolo11m', 'yolo11l', 'yolo11x']
+        # Specific pattern matching with high confidence
         
-        for variant in yolo_variants:
-            if variant in filename:
-                return 'detection', 'ultralytics', variant, 0.95
+        # YOLO Detection
+        if any(pattern in filename for pattern in ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x']):
+            arch = next((pattern for pattern in ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x'] 
+                        if pattern in filename), 'yolov8')
+            return 'detection', 'ultralytics', arch, 0.95
         
-        # DeepLabV3 Detection - Exact Matching of Different Variants
+        if any(pattern in filename for pattern in ['yolov9', 'yolov10', 'yolo11']):
+            return 'detection', 'ultralytics', 'yolo', 0.9
+        
+        # SAM Segmentation
+        if 'sam_vit_b' in filename:
+            return 'segmentation', 'segment_anything', 'sam_vit_b', 0.95
+        elif 'sam_vit_l' in filename:
+            return 'segmentation', 'segment_anything', 'sam_vit_l', 0.95
+        elif 'sam_vit_h' in filename:
+            return 'segmentation', 'segment_anything', 'sam_vit_h', 0.95
+        elif 'mobile_sam' in filename:
+            return 'segmentation', 'segment_anything', 'mobile_sam', 0.9
+        
+        # Stable Diffusion
+        if any(pattern in filename for pattern in ['stable-diffusion', 'sd_1_5', 'sdxl']):
+            if 'sdxl' in filename:
+                return 'generation', 'diffusers', 'sdxl', 0.9
+            else:
+                return 'generation', 'diffusers', 'stable_diffusion', 0.9
+        
+        # CLIP
+        if any(pattern in filename for pattern in ['clip', 'vit-b-32', 'vit-l-14']):
+            arch = 'vit-b-32' if 'vit-b-32' in filename else ('vit-l-14' if 'vit-l-14' in filename else 'clip')
+            return 'multimodal', 'transformers', arch, 0.9
+        
+        # ResNet Classification
+        if 'resnet' in filename:
+            if any(variant in filename for variant in ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152']):
+                arch = next(variant for variant in ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152'] 
+                           if variant in filename)
+                return 'classification', 'torchvision', arch, 0.9
+            return 'classification', 'torchvision', 'resnet', 0.8
+        
+        # EfficientNet Classification
+        if 'efficientnet' in filename:
+            return 'classification', 'torchvision', 'efficientnet', 0.9
+        
+        # DeepLab Segmentation
         if 'deeplabv3' in filename:
             if 'resnet101' in filename:
-                arch = 'deeplabv3_resnet101'
+                return 'segmentation', 'torchvision', 'deeplabv3_resnet101', 0.9
             elif 'resnet50' in filename:
-                arch = 'deeplabv3_resnet50'
+                return 'segmentation', 'torchvision', 'deeplabv3_resnet50', 0.9
             elif 'mobilenet' in filename:
-                arch = 'deeplabv3_mobilenet_v3_large'
+                return 'segmentation', 'torchvision', 'deeplabv3_mobilenet_v3_large', 0.9
             else:
-                arch = 'deeplabv3'
-            return 'segmentation', 'torchvision', arch, 0.9
+                return 'segmentation', 'torchvision', 'deeplabv3', 0.8
         
         # Mask2Former Detection
         if 'mask2former' in filename:
@@ -511,9 +454,21 @@ class ModelDetector:
         
         # U-Net Detection
         if 'unet' in filename or 'u_net' in filename:
-            return 'segmentation', 'pytorch', 'unet', 0.9
+            return 'segmentation', 'pytorch', 'unet', 0.8
         
-        # Inferred based on path and file name
+        # Fallback inference based on directory structure
+        if 'segmentation' in parent_dirs:
+            return 'segmentation', 'unknown', 'unknown', 0.6
+        elif 'detection' in parent_dirs:
+            return 'detection', 'unknown', 'unknown', 0.6
+        elif 'classification' in parent_dirs:
+            return 'classification', 'unknown', 'unknown', 0.6
+        elif 'generation' in parent_dirs:
+            return 'generation', 'unknown', 'unknown', 0.6
+        elif 'multimodal' in parent_dirs:
+            return 'multimodal', 'unknown', 'unknown', 0.6
+        
+        # General pattern matching with lower confidence
         for pattern_group, info in self.MODEL_PATTERNS.items():
             for pattern in info['patterns']:
                 confidence = 0.0
@@ -525,300 +480,212 @@ class ModelDetector:
                 # Parent directory matching
                 if any(pattern in parent_dir for parent_dir in parent_dirs):
                     confidence += 0.3
-                    
-                # Path structure matching - this is the most important basis for judgment
-                if info['type'] in parent_dirs:
-                    confidence += 0.4  # Increase the weight of the path structure
                 
-                if confidence > 0.5:  # Confidence threshold
+                # Path structure matching
+                if info['type'] in parent_dirs:
+                    confidence += 0.4
+                
+                if confidence > 0.5:
                     return info['type'], info['framework'], pattern, confidence
         
-        # Fallback inference based on directory structure (this is the most reliable approach)
-        if 'segmentation' in parent_dirs:
-            # In the segmentation directory, further determine the specific framework
-            if 'deeplabv3' in filename:
-                if 'resnet101' in filename:
-                    return 'segmentation', 'torchvision', 'deeplabv3_resnet101', 0.8
-                elif 'resnet50' in filename:
-                    return 'segmentation', 'torchvision', 'deeplabv3_resnet50', 0.8
-                elif 'mobilenet' in filename:
-                    return 'segmentation', 'torchvision', 'deeplabv3_mobilenet_v3_large', 0.8
-                else:
-                    return 'segmentation', 'torchvision', 'deeplabv3', 0.8
-            elif 'deeplab' in filename:
-                return 'segmentation', 'torchvision', 'deeplabv3', 0.8
-            elif 'sam' in filename:
-                return 'segmentation', 'segment_anything', 'sam', 0.8
-            elif 'mask2former' in filename:
-                return 'segmentation', 'detectron2', 'mask2former', 0.8
-            elif 'unet' in filename:
-                return 'segmentation', 'pytorch', 'unet', 0.8
-            else:
-                # General segmentation model
-                return 'segmentation', 'unknown', 'unknown', 0.7
-                
-        elif 'detection' in parent_dirs:
-            if 'yolo' in filename:
-                return 'detection', 'ultralytics', 'yolo', 0.8
-            else:
-                return 'detection', 'unknown', 'unknown', 0.7
-                
-        elif 'classification' in parent_dirs:
-            if 'resnet' in filename:
-                return 'classification', 'torchvision', 'resnet', 0.8
-            elif 'efficientnet' in filename:
-                return 'classification', 'timm', 'efficientnet', 0.8
-            else:
-                return 'classification', 'unknown', 'unknown', 0.7
-                
-        elif 'generation' in parent_dirs:
-            if 'stable' in filename or 'sd' in filename or 'diffusion' in filename:
-                return 'generation', 'diffusers', 'stable_diffusion', 0.8
-            else:
-                return 'generation', 'unknown', 'unknown', 0.7
-                
-        elif 'multimodal' in parent_dirs:
-            if 'clip' in filename:
-                return 'multimodal', 'transformers', 'clip', 0.8
-            else:
-                return 'multimodal', 'unknown', 'unknown', 0.7
-        
-        # If there is no clear directory structure, use a more conservative inference
+        # Default fallback
         return 'unknown', 'unknown', 'unknown', 0.1
     
-    def _generate_model_name(self, file_path: Path, architecture: str) -> str:
-        """Generate model name"""
-        if architecture != 'unknown':
-            # For the YOLO model, keep the full file name (minus the extension)
-            if 'yolo' in architecture.lower():
-                filename = file_path.stem
-                # Keep the full name of yolov8n, yolov8s, etc.
-                if any(variant in filename.lower() for variant in ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x',
-                                                                   'yolov9c', 'yolov9e', 'yolov10n', 'yolov10s', 'yolov10m']):
-                    return filename.lower()
+    def _extract_metadata(self, file_path: Path) -> Dict[str, Any]:
+        """
+        Extract additional metadata from model file
+        
+        Args:
+            file_path: Path to the model file
             
-            # For DeepLabV3, accurate identification of different variants
-            if 'deeplabv3' in architecture.lower():
-                if 'resnet101' in file_path.name.lower():
-                    return 'deeplabv3_resnet101'
-                elif 'resnet50' in file_path.name.lower():
-                    return 'deeplabv3_resnet50'
-                elif 'mobilenet' in file_path.name.lower():
-                    return 'deeplabv3_mobilenet_v3_large'
-                else:
-                    return 'deeplabv3'
-            
-            return architecture
-        
-        # Use the file name (minus the extension)
-        name = file_path.stem.lower()
-        
-        # Clean up common suffixes, but keep important identifiers
-        suffixes_to_remove = ['-pruned', '-emaonly', '_pruned', '_ema', '_best', '_final', '_coco', '-586e9e4e', '-cd0a2569']
-        for suffix in suffixes_to_remove:
-            name = name.replace(suffix, '')
-        
-        return name
-    
-    def _collect_metadata(self, file_path: Path) -> Dict[str, Any]:
-        """Collecting model metadata"""
+        Returns:
+            Dictionary of metadata
+        """
         metadata = {
-            'file_path': str(file_path),
-            'parent_dir': str(file_path.parent),
-            'modified_time': file_path.stat().st_mtime,
-            'file_hash': self._calculate_file_hash(file_path),
+            'file_extension': file_path.suffix,
+            'file_name': file_path.name,
+            'relative_path': str(file_path.relative_to(self.models_root)) if self.models_root in file_path.parents else str(file_path)
         }
         
-        # Attempt to read model-specific metadata
-        if file_path.suffix.lower() == '.safetensors':
-            metadata.update(self._read_safetensors_metadata(file_path))
-        elif file_path.suffix.lower() in ['.pt', '.pth']:
-            metadata.update(self._read_pytorch_metadata(file_path))
-        
-        return metadata
-    
-    def _calculate_file_hash(self, file_path: Path, chunk_size: int = 8192) -> str:
-        """Calculate the hash value of the file (only read the file header to increase speed)"""
+        # Try to extract more detailed metadata based on file type
         try:
-            hasher = hashlib.md5()
-            with open(file_path, 'rb') as f:
-                # Only read the first 1MB to calculate the hash to avoid slow reading of large files
-                chunk = f.read(1024 * 1024)
-                hasher.update(chunk)
-            return hasher.hexdigest()[:16]  # Return the first 16 bits
-        except Exception as e:
-            logger.warning(f"Failed to calculate file hash {file_path}: {e}")
-            return "unknown"
-    
-    def _read_safetensors_metadata(self, file_path: Path) -> Dict[str, Any]:
-        """Read metadata of SafeTensors files"""
-        metadata = {}
-        try:
-            # The SafeTensors file header contains JSON metadata
-            with open(file_path, 'rb') as f:
-                # Read the first 8 bytes to get the header length
-                header_size = int.from_bytes(f.read(8), byteorder='little')
-                if header_size < 1024 * 1024:  # Reasonable head size
-                    header_bytes = f.read(header_size)
-                    header_str = header_bytes.decode('utf-8')
-                    header_data = json.loads(header_str)
-                    
-                    # Extract useful information
-                    if '__metadata__' in header_data:
-                        metadata.update(header_data['__metadata__'])
-                    
-                    # Number of statistical parameters
-                    total_params = 0
-                    for tensor_info in header_data.values():
-                        if isinstance(tensor_info, dict) and 'shape' in tensor_info:
-                            shape = tensor_info['shape']
-                            params = 1
-                            for dim in shape:
-                                params *= dim
-                            total_params += params
-                    
-                    metadata['total_parameters'] = total_params
-                    
-        except Exception as e:
-            logger.debug(f"Failed to read SafeTensors metadata {file_path}: {e}")
-        
-        return metadata
-    
-    def _read_pytorch_metadata(self, file_path: Path) -> Dict[str, Any]:
-        """Reading PyTorch model metadata"""
-        metadata = {}
-        try:
-            # Only basic information is obtained here to avoid fully loading the model
-            import torch
-            
-            # Try loading model checkpoint information
-            checkpoint = torch.load(file_path, map_location='cpu', weights_only=True)
-            
-            if isinstance(checkpoint, dict):
-                # Common checkpoint keys
-                if 'model' in checkpoint:
-                    model_state = checkpoint['model']
-                elif 'state_dict' in checkpoint:
-                    model_state = checkpoint['state_dict']
-                else:
-                    model_state = checkpoint
+            if file_path.suffix.lower() in ['.pt', '.pth']:
+                # PyTorch model - could inspect with torch.load if needed
+                metadata['framework_hint'] = 'pytorch'
+            elif file_path.suffix.lower() == '.onnx':
+                metadata['framework_hint'] = 'onnx'
+            elif file_path.suffix.lower() == '.h5':
+                metadata['framework_hint'] = 'tensorflow/keras'
+            elif file_path.suffix.lower() == '.safetensors':
+                metadata['framework_hint'] = 'safetensors'
                 
-                # Number of statistical parameters
-                if isinstance(model_state, dict):
-                    total_params = sum(p.numel() for p in model_state.values() if hasattr(p, 'numel'))
-                    metadata['total_parameters'] = total_params
-                
-                # Other metadata
-                for key in ['epoch', 'version', 'arch', 'best_acc1']:
-                    if key in checkpoint:
-                        metadata[key] = checkpoint[key]
-                        
         except Exception as e:
-            logger.debug(f"Failed to read PyTorch metadata {file_path}: {e}")
+            logger.debug(f"Failed to extract detailed metadata from {file_path}: {e}")
         
         return metadata
     
-    def generate_config(self, detected_models: List[ModelInfo], output_file: Optional[Path] = None) -> Dict[str, Any]:
-        """Generate a configuration file based on the detected model"""
-        config = {
-            "models_root": str(self.models_root),
-            "models": {}
-        }
+    def get_model_info(self, model_name: str) -> Optional[ModelInfo]:
+        """
+        Get information about a specific detected model
         
-        for model in detected_models:
-            # Skip models with too low confidence
-            if model.confidence < 0.3:
-                continue
+        Args:
+            model_name: Name of the model
             
-            model_config = {
-                "type": model.type,
-                "path": model.path,
-                "format": model.format,
-                "framework": model.framework,
-                "architecture": model.architecture,
-                "device": "auto",
-                "metadata": {
-                    "size_mb": model.size_mb,
-                    "confidence": model.confidence,
-                    "auto_detected": True
-                }
+        Returns:
+            ModelInfo if found, None otherwise
+        """
+        for model_info in self._detected_models:
+            if model_info.name == model_name:
+                return model_info
+        return None
+    
+    def get_models_by_type(self, model_type: str) -> List[ModelInfo]:
+        """
+        Get all detected models of a specific type
+        
+        Args:
+            model_type: Type of models to retrieve
+            
+        Returns:
+            List of ModelInfo objects
+        """
+        return [model for model in self._detected_models if model.type == model_type]
+    
+    def get_models_by_framework(self, framework: str) -> List[ModelInfo]:
+        """
+        Get all detected models using a specific framework
+        
+        Args:
+            framework: Framework name
+            
+        Returns:
+            List of ModelInfo objects
+        """
+        return [model for model in self._detected_models if model.framework == framework]
+    
+    def get_detection_summary(self) -> Dict[str, Any]:
+        """
+        Get comprehensive detection summary
+        
+        Returns:
+            Dictionary with detection statistics
+        """
+        if not self._detected_models:
+            return {
+                'total_models': 0,
+                'last_scan_time': self._last_scan_time,
+                'scan_in_progress': self._scan_in_progress
             }
-            
-            # Add model type specific default configuration
-            if model.type == "detection":
-                model_config.update({
-                    "batch_size": 4,
-                    "confidence": 0.25,
-                    "nms_threshold": 0.45
-                })
-            elif model.type == "segmentation":
-                model_config.update({
-                    "batch_size": 1,
-                    "points_per_side": 32 if "sam" in model.framework else 16
-                })
-            elif model.type == "classification":
-                model_config.update({
-                    "batch_size": 8,
-                    "top_k": 5
-                })
-            elif model.type == "generation":
-                model_config.update({
-                    "batch_size": 1,
-                    "enable_memory_efficient_attention": True
-                })
-            
-            config["models"][model.name] = model_config
         
-        # Save the configuration file
-        if output_file:
-            import yaml
-            with open(output_file, 'w', encoding='utf-8') as f:
-                yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-            logger.info(f"Model configuration saved to: {output_file}")
+        # Calculate statistics
+        types_count = {}
+        frameworks_count = {}
+        total_size_mb = 0
         
-        return config
-    
-    def get_summary(self, models: List[ModelInfo]) -> Dict[str, Any]:
-        """Get a summary of test results"""
-        summary = {
-            "total_models": len(models),
-            "by_type": {},
-            "by_framework": {},
-            "total_size_mb": sum(m.size_mb for m in models),
-            "high_confidence": len([m for m in models if m.confidence > 0.7]),
-            "medium_confidence": len([m for m in models if 0.3 <= m.confidence <= 0.7]),
-            "low_confidence": len([m for m in models if m.confidence < 0.3])
+        for model in self._detected_models:
+            types_count[model.type] = types_count.get(model.type, 0) + 1
+            frameworks_count[model.framework] = frameworks_count.get(model.framework, 0) + 1
+            total_size_mb += model.file_size_mb
+        
+        return {
+            'total_models': len(self._detected_models),
+            'models_by_type': types_count,
+            'models_by_framework': frameworks_count,
+            'total_size_mb': total_size_mb,
+            'average_size_mb': total_size_mb / len(self._detected_models),
+            'last_scan_time': self._last_scan_time,
+            'scan_in_progress': self._scan_in_progress,
+            'models_root': str(self.models_root)
         }
+    
+    def export_detection_results(self, format: str = 'dict') -> Any:
+        """
+        Export detection results in various formats
         
-        # Statistics by type
-        for model in models:
-            model_type = model.type
-            if model_type not in summary["by_type"]:
-                summary["by_type"][model_type] = {"count": 0, "size_mb": 0}
-            summary["by_type"][model_type]["count"] += 1
-            summary["by_type"][model_type]["size_mb"] += model.size_mb
+        Args:
+            format: Export format ('dict', 'json', 'csv')
+            
+        Returns:
+            Detection results in requested format
+        """
+        if format == 'dict':
+            return {
+                'summary': self.get_detection_summary(),
+                'models': [
+                    {
+                        'name': model.name,
+                        'path': str(model.path),
+                        'type': model.type,
+                        'framework': model.framework,
+                        'architecture': model.architecture,
+                        'confidence': model.confidence,
+                        'file_size_mb': model.file_size_mb,
+                        'last_modified': model.last_modified,
+                        'metadata': model.metadata
+                    }
+                    for model in self._detected_models
+                ]
+            }
         
-        # Statistics by framework
-        for model in models:
-            framework = model.framework
-            if framework not in summary["by_framework"]:
-                summary["by_framework"][framework] = {"count": 0, "size_mb": 0}
-            summary["by_framework"][framework]["count"] += 1
-            summary["by_framework"][framework]["size_mb"] += model.size_mb
+        elif format == 'json':
+            import json
+            data = self.export_detection_results('dict')
+            return json.dumps(data, indent=2, default=str)
         
-        return summary
+        elif format == 'csv':
+            import csv
+            import io
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Write header
+            writer.writerow([
+                'name', 'path', 'type', 'framework', 'architecture', 
+                'confidence', 'file_size_mb', 'last_modified'
+            ])
+            
+            # Write model data
+            for model in self._detected_models:
+                writer.writerow([
+                    model.name, str(model.path), model.type, model.framework,
+                    model.architecture, model.confidence, model.file_size_mb,
+                    model.last_modified
+                ])
+            
+            return output.getvalue()
+        
+        else:
+            raise ValueError(f"Unsupported export format: {format}")
+    
+    def watch_directory(self, interval: int = 300) -> None:
+        """
+        Start watching directory for changes (placeholder for future implementation)
+        
+        Args:
+            interval: Check interval in seconds
+        """
+        # This could be implemented with file system watchers
+        # For now, just log the intention
+        logger.info(f"Directory watching not yet implemented (would check every {interval}s)")
+        self.update_metric('watch_interval', interval)
 
 
-# Convenience functions
-def detect_models_in_directory(directory: str, **kwargs) -> List[ModelInfo]:
-    """Convenience functions: Detect models in the specified directory"""
-    detector = ModelDetector(Path(directory))
-    return detector.detect_models(**kwargs)
-
-
-def generate_models_config(directory: str, output_file: str = None) -> Dict[str, Any]:
-    """Convenience functions: Generate model configuration file"""
-    detector = ModelDetector(Path(directory))
-    models = detector.detect_models()
-    output_path = Path(output_file) if output_file else None
-    return detector.generate_config(models, output_path)
+# Enhanced global function
+def get_model_detector(models_root: Optional[Path] = None) -> ModelDetector:
+    """
+    Get a model detector instance
+    
+    Args:
+        models_root: Root directory for model scanning
+        
+    Returns:
+        ModelDetector instance
+    """
+    detector = ModelDetector(models_root)
+    
+    # Auto-start the detector
+    if not detector.start():
+        logger.error("Failed to start ModelDetector")
+    
+    return detector
