@@ -34,10 +34,10 @@ try:
     from src.cv_platform.utils.logger import setup_logger
     
     # Import API components
-    from .routers import models, tasks, files, monitoring, websocket
-    from .middleware.logging import RequestLoggingMiddleware
-    from .middleware.auth import AuthenticationMiddleware
-    from .dependencies.components import get_components_dependencies
+    from src.cv_platform.api.routers import models, tasks, files, monitoring, websocket
+    from src.cv_platform.api.middleware.logging import RequestLoggingMiddleware
+    from src.cv_platform.api.middleware.auth import AuthenticationMiddleware
+    from src.cv_platform.api.dependencies.components import get_components_dependencies
     
 except ImportError as e:
     logger.error(f"Failed to import required modules: {e}")

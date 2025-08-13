@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import PlainTextResponse
 from loguru import logger
 
-from ..models.responses import APIResponse, HealthCheckResponse, SystemStatusResponse
+from ..models1.responses import APIResponse, HealthCheckResponse, SystemStatusResponse
 from ..dependencies.auth import get_current_user, get_admin_user
 from ..dependencies.components import (
     get_manager_registry, get_model_manager, get_scheduler,

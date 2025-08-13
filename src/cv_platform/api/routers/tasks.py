@@ -18,8 +18,8 @@ import numpy as np
 from PIL import Image
 import io
 
-from ..models.responses import APIResponse, TaskResponse
-from ..models.requests import TaskSubmissionRequest
+from ..models1.responses import APIResponse, TaskResponse
+from ..models1.requests import TaskSubmissionRequest
 from ..dependencies.auth import get_current_user, verify_permissions
 from ..dependencies.components import get_scheduler, get_model_manager, get_gpu_monitor
 
