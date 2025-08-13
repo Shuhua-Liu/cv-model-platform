@@ -4,8 +4,8 @@ CV Platform API模块
 提供REST API服务，支持模型调用、管理和监控
 """
 
-from .rest_api import app
-from .schemas import *
+from .models1.requests import app
+from .utils import *
 
 __all__ = [
     'app',
