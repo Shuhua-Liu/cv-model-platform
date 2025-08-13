@@ -21,11 +21,13 @@ except ImportError:
 
 try:
     import pynvml
-    NVML_AVAILABLE = True
+    # Try to initialize NVML
     pynvml.nvmlInit()
-except ImportError:
+    NVML_AVAILABLE = True
+except (ImportError, Exception) as e:
     NVML_AVAILABLE = False
-    logger.warning("nvidia-ml-py not available - detailed GPU info unavailable")
+    logger.info("NVIDIA Management Library not available - detailed GPU info unavailable")
+    logger.debug(f"NVML error: {e}")
 
 try:
     import psutil
@@ -153,7 +155,7 @@ class GPUMonitor:
                     logger.error(f"Error discovering GPU {device_id}: {e}")
         
         # Check MPS availability (Apple Silicon)
-        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             # MPS is treated as device ID -1 for identification
             mps_info = GPUInfo(
                 device_id=-1,
@@ -164,12 +166,35 @@ class GPUMonitor:
             self._devices[-1] = mps_info
             self._memory_history[-1] = []
             self._utilization_history[-1] = []
-            logger.debug("Discovered Apple MPS device")
+            logger.info("Discovered Apple MPS device")
+        else:
+            # No GPU devices available
+            logger.info("No GPU devices found - running in CPU-only mode")
+            # Add a virtual CPU device for consistency
+            cpu_info = GPUInfo(
+                device_id=-2,
+                name="CPU",
+                total_memory_mb=self._get_system_memory_mb(),
+                is_available=True
+            )
+            self._devices[-2] = cpu_info
+            self._memory_history[-2] = []
+            self._utilization_history[-2] = []
     
     def _get_mps_memory_info(self) -> float:
         """Get MPS memory information"""
         try:
             # Apple MPS memory is shared with system memory
+            if PSUTIL_AVAILABLE:
+                memory = psutil.virtual_memory()
+                return memory.total / (1024 * 1024)  # Convert to MB
+            return 8192.0  # Default assumption of 8GB
+        except Exception:
+            return 8192.0
+    
+    def _get_system_memory_mb(self) -> float:
+        """Get system memory in MB"""
+        try:
             if PSUTIL_AVAILABLE:
                 memory = psutil.virtual_memory()
                 return memory.total / (1024 * 1024)  # Convert to MB
@@ -546,6 +571,7 @@ class GPUMonitor:
             device_id: Device ID to clear, or None for current device
         """
         if not TORCH_AVAILABLE:
+            logger.info("PyTorch not available - memory clear skipped")
             return
         
         try:
@@ -553,15 +579,20 @@ class GPUMonitor:
                 # MPS doesn't have explicit cache clearing
                 logger.info("MPS cache clearing not available")
                 return
+            elif device_id == -2:  # CPU device
+                logger.info("CPU memory clear not applicable")
+                return
             
             if device_id is None:
                 device_id = self.get_current_device()
             
-            if device_id is not None and torch.cuda.is_available():
+            if device_id is not None and device_id >= 0 and torch.cuda.is_available():
                 torch.cuda.empty_cache()
-                if device_id in self._devices:
+                if device_id < torch.cuda.device_count():
                     torch.cuda.synchronize(device_id)
                 logger.info(f"Cleared memory cache for device {device_id}")
+            else:
+                logger.info("No CUDA devices available for memory clearing")
         
         except Exception as e:
             logger.error(f"Failed to clear memory cache: {e}")

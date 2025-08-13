@@ -6,7 +6,7 @@ caching, GPU monitoring, scheduling, and base management functionality.
 """
 
 from .config_manager import ConfigManager, get_config_manager
-from .model_detector import ModelDetector, ModelInfo
+from .model_detector import ModelDetector, ModelInfo, get_model_detector
 from .model_manager import ModelManager, get_model_manager
 from .cache_manager import CacheManager, get_cache_manager, CacheStrategy, CacheStats
 from .gpu_monitor import GPUMonitor, get_gpu_monitor, GPUInfo, GPUMemoryInfo, GPUUtilization, DeviceType
@@ -36,6 +36,7 @@ __all__ = [
     # Model Detection and Management
     'ModelDetector',
     'ModelInfo',
+    'get_model_detector'
     'ModelManager',
     'get_model_manager',
     
