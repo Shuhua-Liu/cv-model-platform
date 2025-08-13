@@ -267,10 +267,35 @@ stable_diffusion_2_1:
   safety_checker: true        # Enable NSFW content filtering
   enable_watermark: false     # Add invisible watermark
 
+# Stable Diffusion 2.1_unclip - Popular text-to-image model
+stable_diffusion_2_1_unclip:
+  type: generation
+  path: "{models_root}/generation/stable_diffusion/sd_2_1_unclip/"
+  framework: diffusers
+  architecture: stable_diffusion
+  device: auto
+
+  # Generation parameters
+  batch_size: 1
+  num_inference_steps: 20     # Number of denoising steps
+  guidance_scale: 7.5         # CFG scale for prompt adherence
+  width: 512                  # Output image width
+  height: 512                 # Output image height
+
+  # Memory optimization
+  enable_memory_efficient_attention: true
+  enable_xformers: false      # Requires xformers installation
+  cpu_offload: false          # Offload to CPU when not in use
+  sequential_cpu_offload: false
+
+  # Safety and quality
+  safety_checker: true        # Enable NSFW content filtering
+  enable_watermark: false     # Add invisible watermark
+
 # Stable Diffusion XL - Higher resolution generation
 stable_diffusion_xl:
   type: generation
-  path: "{models_root}/generation/stable_diffusion/sdxl_base/"
+  path: "{models_root}/generation/stable_diffusion/sdxl_base_1.0/"
   framework: diffusers
   architecture: stable_diffusion_xl
   device: auto
@@ -285,7 +310,7 @@ stable_diffusion_xl:
 # ControlNet - Controllable generation
 controlnet_canny:
   type: generation
-  path: "{models_root}/generation/controlnet/controlnet_canny/"
+  path: "{models_root}/generation/controlnet/controlnet_canny-sd21/"
   framework: diffusers
   architecture: controlnet
   device: auto
@@ -296,6 +321,34 @@ controlnet_canny:
 # =============================================================================
 # Multimodal Models
 # =============================================================================
+
+# CLIP ViT-B/32 - Vision-language understanding
+open_clip_vit_b_32:
+  type: multimodal
+  path: "{models_root}/multimodal/open_clip/ViT-B-32/"
+  framework: transformers
+  architecture: clip_vit_base_patch32
+  device: auto
+
+  # CLIP parameters
+  batch_size: 8
+  max_text_length: 77       # Maximum text sequence length
+  temperature: 0.07         # Temperature for similarity computation
+
+  # Text preprocessing
+  text_tokenizer: "clip"
+  case_sensitive: false
+
+
+# CLIP ViT-H/14 - Larger model for better performance
+open_clip_vit_h_14:
+  type: multimodal
+  path: "{models_root}/multimodal/open_clip/ViT-H-14/"
+  framework: transformers
+  architecture: clip_vit_large_patch14
+  device: auto
+  batch_size: 4
+  max_text_length: 77
 
 # CLIP ViT-B/32 - Vision-language understanding
 clip_vit_b_32:
@@ -367,6 +420,8 @@ model_groups:
     - stable_diffusion_xl
 
   clip_models:
+    - open_clip_vit_b_32
+    - open_clip_vit_h_14
     - clip_vit_b_32
     - clip_vit_l_14
 
@@ -374,10 +429,10 @@ model_groups:
 
 model_aliases:
   yolo: yolov8n              # Default YOLO model
-  sam: sam_vit_b             # Default SAM model
+  sam: sam_vit_h             # Default SAM model
   resnet: resnet50           # Default ResNet model
   sd: stable_diffusion_2_1   # Default Stable Diffusion model
-  clip: clip_vit_b_32        # Default CLIP model
+  clip: open_clip_vit_b_32        # Default CLIP model
 
 # =============================================================================
 # Global Model Settings
