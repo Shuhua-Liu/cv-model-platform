@@ -63,7 +63,7 @@ class TaskSubmissionRequest(BaseModel):
     )
     priority: str = Field(
         default="normal",
-        regex="^(low|normal|high|critical)$",
+        pattern="^(low|normal|high|critical)$",
         description="Task priority level"
     )
     timeout: Optional[float] = Field(
