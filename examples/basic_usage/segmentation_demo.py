@@ -20,12 +20,12 @@ try:
     setup_logger("INFO")
     from loguru import logger
 except ImportError as e:
-    print(f"导入错误: {e}")
-    print("请确保已正确安装依赖并从项目根目录运行")
+    print(f"Import error: {e}")
+    print("Make sure the dependencies are installed correctly and run from the project root directory")
     sys.exit(1)
 
 def create_test_image():
-    """创建一个测试图像"""
+    """Create a test image"""
     try:
         from PIL import Image, ImageDraw
         import numpy as np
@@ -52,32 +52,32 @@ def create_test_image():
         test_image_path = Path("test_segmentation_image.jpg")
         img.save(test_image_path)
         
-        logger.info(f"Split test images were created: {test_image_path}")
+        logger.info(f"Segmentation test images were created: {test_image_path}")
         return str(test_image_path)
         
     except ImportError:
-        logger.error("PIL未安装，无法创建测试图像")
+        logger.error("PIL is not installed, cannot create test image")
         return None
     except Exception as e:
-        logger.error(f"创建测试图像失败: {e}")
+        logger.error(f"Creating a test image failed: {e}")
         return None
 
 def test_deeplabv3_segmentation(model_name, image_path):
-    """测试DeepLabV3分割"""
+    """Testing DeepLabV3 segmentation"""
     try:
-        logger.info(f"测试DeepLabV3分割: {model_name}")
+        logger.info(f"Testing DeepLabV3 segmentation: {model_name}")
         
         manager = get_model_manager()
         
-        # 加载模型
-        logger.info("加载DeepLabV3模型...")
+        # Load model
+        logger.info("Loading the DeepLabV3 model...")
         results = manager.predict(model_name, image_path, threshold=0.5)
         
-        logger.info("DeepLabV3分割完成")
+        logger.info("DeepLabV3 segmentation completed")
         
-        # 显示结果
+        # Show results
         if 'masks' in results and len(results['masks']) > 0:
-            logger.info(f"发现 {len(results['masks'])} 个分割区域")
+            logger.info(f"{len(results['masks'])} segmented regions found")
             
             for i, (class_id, class_name, score, area) in enumerate(zip(
                 results.get('class_ids', []),
@@ -86,11 +86,11 @@ def test_deeplabv3_segmentation(model_name, image_path):
                 results.get('areas', [])
             )):
                 logger.info(f"  {i+1}. {class_name} (ID: {class_id})")
-                logger.info(f"     置信度: {score:.3f}, 面积: {area:.0f} 像素")
+                logger.info(f"     Confidence: {score:.3f}, Area: {area:.0f} pixels")
         else:
-            logger.warning("未找到分割区域")
+            logger.warning("No segmentation region found")
         
-        # 尝试可视化
+        # Try visualization
         try:
             adapter = manager.load_model(model_name)
             vis_result = adapter.visualize_results(
@@ -98,78 +98,78 @@ def test_deeplabv3_segmentation(model_name, image_path):
                 results, 
                 save_path="deeplabv3_result.jpg"
             )
-            logger.info("DeepLabV3可视化结果已保存: deeplabv3_result.jpg")
+            logger.info("DeepLabV3 visualization results have been saved: deeplabv3_result.jpg")
         except Exception as e:
-            logger.warning(f"可视化失败: {e}")
+            logger.warning(f"Visualization failed: {e}")
         
         return True
         
     except Exception as e:
-        logger.error(f"DeepLabV3分割测试失败: {e}")
+        logger.error(f"DeepLabV3 segmentation test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
 
 def test_sam_segmentation(model_name, image_path, mode="automatic"):
-    """测试SAM分割"""
+    """Testing SAM segmentation"""
     try:
-        logger.info(f"测试SAM分割: {model_name} (模式: {mode})")
+        logger.info(f"Testing SAM segmentation: {model_name} (Mode: {mode})")
         
         manager = get_model_manager()
         adapter = manager.load_model(model_name)
         
         if mode == "automatic":
-            # 自动分割
-            logger.info("执行SAM自动分割...")
+            # Automatic segmentation
+            logger.info("Perform SAM automatic segmentation...")
             results = adapter.predict(image_path, mode="automatic")
             
         elif mode == "point":
-            # 点击分割 - 在图像中心点击
-            logger.info("执行SAM点击分割...")
+            # Click to segment - click in the center of the image
+            logger.info("Perform SAM click split...")
             results = adapter.predict_point(image_path, point=(320, 240), label=1)
             
         elif mode == "box":
-            # 框选分割 - 选择图像中央区域
-            logger.info("执行SAM框选分割...")
+            # Frame selection segmentation - select the central area of the image
+            logger.info("Perform SAM frame selection segmentation...")
             results = adapter.predict_box(image_path, box=(200, 150, 450, 350))
             
         else:
-            raise ValueError(f"不支持的SAM模式: {mode}")
+            raise ValueError(f"Unsupported SAM mode: {mode}")
         
-        logger.info("SAM分割完成")
+        logger.info("SAM segmentation completed")
         
-        # 显示结果
+        # Show results
         if 'masks' in results and len(results['masks']) > 0:
-            logger.info(f"发现 {len(results['masks'])} 个分割掩码")
+            logger.info(f"{len(results['masks'])} segmentation masks found")
             
             scores = results.get('scores', [])
             areas = results.get('areas', [])
             
             for i, (score, area) in enumerate(zip(scores, areas)):
-                logger.info(f"  掩码 {i+1}: 分数: {score:.3f}, 面积: {area:.0f} 像素")
+                logger.info(f"  Mask {i+1}: score: {score:.3f}, area: {area:.0f} pixels")
                 
-            # 显示统计信息
+            # Show statistics
             if scores:
-                logger.info(f"平均分数: {sum(scores)/len(scores):.3f}")
-                logger.info(f"总面积: {sum(areas):.0f} 像素")
+                logger.info(f"Average scores: {sum(scores)/len(scores):.3f}")
+                logger.info(f"Total area: {sum(areas):.0f} pixels")
         else:
-            logger.warning("未找到分割掩码")
+            logger.warning("Segmentation mask not found")
         
-        # 可视化结果
+        # Visualization
         try:
             vis_result = adapter.visualize_results(
                 image_path, 
                 results, 
                 save_path=f"sam_{mode}_result.jpg"
             )
-            logger.info(f"SAM可视化结果已保存: sam_{mode}_result.jpg")
+            logger.info(f"SAM visualization results have been saved: sam_{mode}_result.jpg")
         except Exception as e:
-            logger.warning(f"可视化失败: {e}")
+            logger.warning(f"Visualization failure: {e}")
         
         return True
         
     except Exception as e:
-        logger.error(f"SAM分割测试失败: {e}")
+        logger.error(f"SAM Segmentation Test Failure: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -189,7 +189,7 @@ def main():
                       type=str,
                       choices=['automatic', 'point', 'box'],
                       default='automatic',
-                      help='SAM分割模式')
+                      help='SAM Segmentation Mode')
     
     parser.add_argument('--list-models', '-l',
                       action='store_true',
@@ -235,9 +235,9 @@ def main():
                 architecture = config.get('architecture', 'unknown')
                 
                 print(f"🔧 {name}")
-                print(f"   架构: {architecture}")
-                print(f"   框架: {framework}")
-                print(f"   路径: {config.get('path', 'unknown')}")
+                print(f"   Architecture: {architecture}")
+                print(f"   Framework: {framework}")
+                print(f"   Path: {config.get('path', 'unknown')}")
                 
                 # 检查依赖
                 if framework == 'torchvision':
