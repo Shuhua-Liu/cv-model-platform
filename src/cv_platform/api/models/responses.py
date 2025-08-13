@@ -28,7 +28,7 @@ class ModelInfoResponse(APIResponse):
     data: ModelInfo = Field(description="Model information")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Model information for 'yolov8n'",
@@ -65,7 +65,7 @@ class ModelListResponse(APIResponse):
     data: Dict[str, Any] = Field(description="Model list data")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Found 5 models",
@@ -109,7 +109,7 @@ class TaskResponse(APIResponse):
     data: TaskResult = Field(description="Task result")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Task completed successfully",
@@ -159,7 +159,7 @@ class HealthCheckResponse(APIResponse):
     data: Dict[str, Any] = Field(description="Health check data")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "All systems operational",

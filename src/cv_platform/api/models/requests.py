@@ -37,7 +37,7 @@ class ModelLoadRequest(BaseModel):
         return v
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "device": "cuda:0",
                 "force_reload": False,
@@ -96,7 +96,7 @@ class TaskSubmissionRequest(BaseModel):
         return v
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "model_name": "yolov8n",
                 "method": "predict",
@@ -133,7 +133,7 @@ class FileUploadMetadata(BaseModel):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "filename": "test_image.jpg",
                 "content_type": "image/jpeg",

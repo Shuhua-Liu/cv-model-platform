@@ -22,7 +22,7 @@ class APIResponse(BaseModel):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Operation completed successfully",
@@ -50,7 +50,7 @@ class PaginationParams(BaseModel):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "limit": 50,
                 "offset": 0
@@ -70,7 +70,7 @@ class FilterParams(BaseModel):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "search": "yolo",
                 "sort_by": "name",

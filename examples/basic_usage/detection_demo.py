@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-目标检测演示脚本
+Object Detection Demo Script
 
-展示如何使用CV Model Platform进行目标检测
+Shows how to perform object detection using the CV Model Platform.
 """
 
 import sys
 import argparse
 from pathlib import Path
 
-# 添加项目根目录到Python路径
+# Add the project root directory to the Python path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -19,63 +19,63 @@ try:
     setup_logger("INFO")
     from loguru import logger
 except ImportError as e:
-    print(f"导入错误: {e}")
-    print("请确保已正确安装依赖并从项目根目录运行")
+    print(f"Import error: {e}")
+    print("Make sure the dependencies are installed correctly and run from the project root directory")
     sys.exit(1)
 
 def create_test_image():
-    """创建一个测试图像"""
+    """Create a test image"""
     try:
         from PIL import Image, ImageDraw
         import numpy as np
         
-        # 创建一个简单的测试图像
+        # Create a simple test image
         width, height = 640, 480
         img = Image.new('RGB', (width, height), color='lightblue')
         draw = ImageDraw.Draw(img)
         
-        # 绘制一些简单的形状作为"对象"
-        # 绘制矩形
+        # Draw some simple shapes as "objects"
+        # Draw a rectangle
         draw.rectangle([100, 100, 200, 200], fill='red', outline='black', width=2)
         draw.rectangle([300, 150, 450, 300], fill='green', outline='black', width=2)
         draw.rectangle([200, 300, 350, 400], fill='blue', outline='black', width=2)
         
-        # 绘制圆形
+        # Draw a circle
         draw.ellipse([450, 50, 550, 150], fill='yellow', outline='black', width=2)
         
-        # 保存测试图像
+        # Save the test image
         test_image_path = Path("test_image.jpg")
         img.save(test_image_path)
         
-        logger.info(f"测试图像已创建: {test_image_path}")
+        logger.info(f"Test image created: {test_image_path}")
         return str(test_image_path)
         
     except ImportError:
-        logger.error("PIL未安装，无法创建测试图像")
+        logger.error("PIL is not installed, cannot create test image")
         return None
     except Exception as e:
-        logger.error(f"创建测试图像失败: {e}")
+        logger.error(f"Creating a test image failed: {e}")
         return None
 
 def test_model_detection(model_name="yolov8n", image_path=None):
-    """测试目标检测功能"""
+    """Testing the object detection function"""
     
-    # 获取模型管理器
-    logger.info("初始化模型管理器...")
+    # Get the model manager
+    logger.info("Initialize the model manager...")
     manager = get_model_manager()
     
-    # 列出可用模型
+    # List available models
     available_models = manager.list_available_models()
-    logger.info(f"发现 {len(available_models)} 个可用模型")
+    logger.info(f"Found {len(available_models)} available models")
     
     for name, info in available_models.items():
         model_type = info['config'].get('type', 'unknown')
         logger.info(f"  - {name}: {model_type}")
     
-    # 检查指定的模型是否可用
+    # Checks whether the specified model is available
     if model_name not in available_models:
-        logger.error(f"模型 {model_name} 不可用")
-        logger.info("可用的检测模型:")
+        logger.error(f"Model {model_name} is not available")
+        logger.info("Available detection models:")
         detection_models = [name for name, info in available_models.items() 
                           if info['config'].get('type') == 'detection']
         
@@ -83,87 +83,87 @@ def test_model_detection(model_name="yolov8n", image_path=None):
             for name in detection_models:
                 logger.info(f"  - {name}")
             model_name = detection_models[0]
-            logger.info(f"使用第一个可用的检测模型: {model_name}")
+            logger.info(f"Use the first available detection model: {model_name}")
         else:
-            logger.error("没有找到任何检测模型")
+            logger.error("No detection models found")
             return False
     
-    # 准备测试图像
+    # Prepare test images
     if not image_path:
         image_path = create_test_image()
         if not image_path:
-            logger.error("无法创建测试图像")
+            logger.error("Unable to create test image")
             return False
     
     test_image = Path(image_path)
     if not test_image.exists():
-        logger.error(f"测试图像不存在: {test_image}")
+        logger.error(f"The test image does not exist: {test_image}")
         return False
     
     try:
-        # 加载并测试模型
-        logger.info(f"加载模型: {model_name}")
+        # Load and test the model
+        logger.info(f"Loading the model: {model_name}")
         
-        # 方法1: 直接使用模型管理器
-        logger.info("开始预测...")
+        # Method 1: Using the Model Manager Directly
+        logger.info("Start forecasting...")
         results = manager.predict(model_name, str(test_image))
         
-        logger.info(f"检测完成 - 发现 {len(results)} 个对象")
+        logger.info(f"Detection complete - {len(results)} objects found")
         
-        # 显示结果
+        # Show result
         if results:
-            logger.info("检测结果:")
+            logger.info("Test results:")
             for i, detection in enumerate(results, 1):
                 class_name = detection['class']
                 confidence = detection['confidence']
                 bbox = detection['bbox']
                 
                 logger.info(f"  {i}. {class_name}: {confidence:.3f}")
-                logger.info(f"     边界框: [{bbox[0]:.1f}, {bbox[1]:.1f}, {bbox[2]:.1f}, {bbox[3]:.1f}]")
+                logger.info(f"     Bounding box: [{bbox[0]:.1f}, {bbox[1]:.1f}, {bbox[2]:.1f}, {bbox[3]:.1f}]")
         else:
-            logger.warning("未检测到任何对象")
+            logger.warning("No objects detected")
         
-        # 方法2: 直接使用适配器（可选）
-        logger.info("\n测试直接适配器调用...")
+        # Method 2: Use the adapter directly (optional)
+        logger.info("\nTesting direct adapter calls...")
         adapter = manager.load_model(model_name)
         direct_results = adapter.predict(str(test_image))
         
-        logger.info(f"直接调用结果: {len(direct_results)} 个对象")
+        logger.info(f"Direct call results: {len(direct_results)} objects")
         
-        # 获取模型信息
+        # Get model info
         model_info = adapter.get_model_info()
-        logger.info("模型信息:")
-        logger.info(f"  适配器: {model_info.get('adapter_class', 'unknown')}")
-        logger.info(f"  设备: {model_info.get('device', 'unknown')}")
-        logger.info(f"  已加载: {model_info.get('is_loaded', False)}")
+        logger.info("Model Info:")
+        logger.info(f"  Adapter: {model_info.get('adapter_class', 'unknown')}")
+        logger.info(f"  Device: {model_info.get('device', 'unknown')}")
+        logger.info(f"  Loaded: {model_info.get('is_loaded', False)}")
         
         return True
         
     except Exception as e:
-        logger.error(f"模型测试失败: {e}")
+        logger.error(f"Model test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description='CV Model Platform 目标检测演示')
+    parser = argparse.ArgumentParser(description='CV Model Platform object detection demo')
     
     parser.add_argument('--model', '-m',
                       type=str,
                       default='yolov8n',
-                      help='要使用的模型名称')
+                      help='The name of the model to use')
     
     parser.add_argument('--image', '-i',
                       type=str,
-                      help='测试图像路径（如果不提供将创建测试图像）')
+                      help='Test image path (if not provided a test image will be created)')
     
     parser.add_argument('--list-models', '-l',
                       action='store_true',
-                      help='列出所有可用模型')
+                      help='List all available models')
     
     parser.add_argument('--verbose', '-v',
                       action='store_true',
-                      help='详细输出')
+                      help='Verbose output')
     
     args = parser.parse_args()
     
@@ -172,12 +172,12 @@ def main():
     
     try:
         if args.list_models:
-            # 只列出模型
-            logger.info("获取可用模型列表...")
+            # List only models
+            logger.info("Get a list of available models...")
             manager = get_model_manager()
             available_models = manager.list_available_models()
             
-            print("\n📋 可用模型:")
+            print("\n📋 Available models:")
             print("=" * 60)
             
             for name, info in available_models.items():
@@ -187,37 +187,37 @@ def main():
                 source = info.get('source', 'unknown')
                 
                 print(f"🔧 {name}")
-                print(f"   类型: {model_type}")
-                print(f"   框架: {framework}")
-                print(f"   来源: {source}")
-                print(f"   路径: {config.get('path', 'unknown')}")
+                print(f"   Type: {model_type}")
+                print(f"   Framework: {framework}")
+                print(f"   Source: {source}")
+                print(f"   Path: {config.get('path', 'unknown')}")
                 print()
             
             return 0
         
-        # 运行检测测试
-        print("🚀 CV Model Platform - 目标检测演示")
+        # Run detection tests
+        print("🚀 CV Model Platform - Object Detection Demo")
         print("=" * 50)
         
         success = test_model_detection(args.model, args.image)
         
         if success:
-            print("\n✅ 检测演示完成！")
-            print("\n🎉 CV Model Platform 工作正常")
-            print("\n🚀 接下来可以尝试:")
-            print("   1. 使用自己的图像: python examples/basic_usage/detection_demo.py -i your_image.jpg")
-            print("   2. 尝试其他模型: python examples/basic_usage/detection_demo.py -m model_name")
-            print("   3. 查看所有模型: python examples/basic_usage/detection_demo.py --list-models")
+            print("\n✅ Detection demonstration completed！")
+            print("\n🎉 CV Model Platform works properly")
+            print("\n🚀 Next you can try:")
+            print("   1. Use your own images: python examples/basic_usage/detection_demo.py -i your_image.jpg")
+            print("   2. Try other models: python examples/basic_usage/detection_demo.py -m model_name")
+            print("   3. View all models: python examples/basic_usage/detection_demo.py --list-models")
             return 0
         else:
-            print("\n❌ 检测演示失败")
+            print("\n❌ Detection demonstration failed")
             return 1
             
     except KeyboardInterrupt:
-        print("\n用户取消操作")
+        print("\nUser cancels the operation")
         return 0
     except Exception as e:
-        logger.error(f"程序异常: {e}")
+        logger.error(f"Program exception: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

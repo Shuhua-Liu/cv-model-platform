@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-图像分割演示脚本
+Image Segmentation Demo Script
 
-展示如何使用CV Model Platform进行图像分割
-支持DeepLabV3和SAM模型
+Shows how to use the CV Model Platform for image segmentation.
+Supports DeepLabV3 and SAM models.
 """
 
 import sys
 import argparse
 from pathlib import Path
 
-# 添加项目根目录到Python路径
+# Add the project root directory to the Python path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -30,29 +30,29 @@ def create_test_image():
         from PIL import Image, ImageDraw
         import numpy as np
         
-        # 创建一个更适合分割的测试图像
+        # Creating a test image that is more suitable for segmentation
         width, height = 640, 480
         img = Image.new('RGB', (width, height), color='white')
         draw = ImageDraw.Draw(img)
         
-        # 绘制一些形状作为分割对象
-        # 背景
+        # Draw some shapes as segmentation objects
+        # Background
         draw.rectangle([0, 0, width, height], fill='lightblue')
         
-        # 主要对象
+        # Main object
         draw.ellipse([150, 100, 350, 300], fill='red', outline='darkred', width=3)
         draw.rectangle([400, 150, 580, 350], fill='green', outline='darkgreen', width=3)
         draw.polygon([(50, 350), (150, 250), (250, 350), (150, 450)], fill='yellow', outline='orange', width=3)
         
-        # 小对象
+        # Small object
         draw.ellipse([450, 50, 550, 150], fill='purple', outline='darkviolet', width=2)
         draw.rectangle([50, 50, 120, 120], fill='orange', outline='darkorange', width=2)
         
-        # 保存测试图像
+        # Save the test image
         test_image_path = Path("test_segmentation_image.jpg")
         img.save(test_image_path)
         
-        logger.info(f"分割测试图像已创建: {test_image_path}")
+        logger.info(f"Split test images were created: {test_image_path}")
         return str(test_image_path)
         
     except ImportError:

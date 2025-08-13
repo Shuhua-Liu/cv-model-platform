@@ -1,8 +1,8 @@
 """
-Scheduler - Task scheduling and resource management system
+Enhanced Task Scheduler - Inheriting from BaseManager
 
-Provides intelligent task scheduling, resource allocation, queue management,
-and priority-based execution for model inference tasks.
+Task scheduling and resource management system with full BaseManager integration
+for state management, health monitoring, and lifecycle management.
 """
 
 import time
@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 from queue import PriorityQueue, Queue, Empty
 from concurrent.futures import ThreadPoolExecutor, Future
 from loguru import logger
+
+from .base_manager import BaseManager, ManagerState, HealthStatus, HealthCheckResult
 
 try:
     from .gpu_monitor import get_gpu_monitor, GPUMonitor
@@ -243,24 +245,6 @@ class TaskExecutor:
         
         return result
     
-    def cancel_task(self, task_id: str) -> bool:
-        """
-        Cancel a running task
-        
-        Args:
-            task_id: ID of task to cancel
-            
-        Returns:
-            True if task was cancelled
-        """
-        with self._lock:
-            if task_id in self._running_tasks:
-                # Note: This is a simplified cancellation
-                # In practice, you might need more sophisticated cancellation
-                logger.warning(f"Task cancellation requested for {task_id}")
-                return True
-            return False
-    
     def get_stats(self) -> dict:
         """Get executor statistics"""
         with self._lock:
@@ -288,8 +272,8 @@ class TaskExecutor:
         self._thread_pool.shutdown(wait=True)
 
 
-class TaskScheduler:
-    """Main task scheduler with intelligent resource allocation"""
+class TaskScheduler(BaseManager):
+    """Enhanced task scheduler inheriting from BaseManager"""
     
     def __init__(self,
                  model_manager: Any,
@@ -298,7 +282,7 @@ class TaskScheduler:
                  enable_gpu_monitoring: bool = True,
                  enable_caching: bool = True):
         """
-        Initialize task scheduler
+        Initialize task scheduler with BaseManager capabilities
         
         Args:
             model_manager: Model manager instance
@@ -307,26 +291,30 @@ class TaskScheduler:
             enable_gpu_monitoring: Enable GPU monitoring
             enable_caching: Enable result caching
         """
+        super().__init__("TaskScheduler")
+        
         self.model_manager = model_manager
         self.strategy = strategy
         self.max_queue_size = max_queue_size
+        self.enable_gpu_monitoring = enable_gpu_monitoring
+        self.enable_caching = enable_caching
         
-        # Task management
-        self._task_queue = PriorityQueue(maxsize=max_queue_size)
+        # Task management (will be initialized in initialize() method)
+        self._task_queue = None
         self._task_futures: Dict[str, Future] = {}
         self._task_results: Dict[str, TaskResult] = {}
-        self._lock = threading.RLock()
+        self._scheduler_lock = threading.RLock()
         
         # Executors
         self._executors: Dict[str, TaskExecutor] = {}
         self._round_robin_index = 0
         
-        # Monitoring and caching
-        self.gpu_monitor = get_gpu_monitor() if enable_gpu_monitoring else None
-        self.cache_manager = get_cache_manager() if enable_caching else None
+        # External components
+        self.gpu_monitor = None
+        self.cache_manager = None
         
         # Scheduler state
-        self._running = False
+        self._scheduler_running = False
         self._scheduler_thread = None
         
         # Statistics
@@ -335,10 +323,172 @@ class TaskScheduler:
         self.total_tasks_failed = 0
         self.queue_wait_times = []
         
-        # Initialize executors
-        self._initialize_executors()
+        logger.info("TaskScheduler initialized with BaseManager capabilities")
+    
+    def initialize(self) -> bool:
+        """
+        Initialize task scheduler - implements BaseManager abstract method
         
-        logger.info(f"Task scheduler initialized with {strategy.value} strategy")
+        Returns:
+            True if initialization successful, False otherwise
+        """
+        try:
+            # Initialize task queue
+            self._task_queue = PriorityQueue(maxsize=self.max_queue_size)
+            
+            # Initialize monitoring and caching if enabled
+            if self.enable_gpu_monitoring:
+                try:
+                    self.gpu_monitor = get_gpu_monitor()
+                except Exception as e:
+                    logger.warning(f"Failed to initialize GPU monitor: {e}")
+            
+            if self.enable_caching:
+                try:
+                    self.cache_manager = get_cache_manager()
+                except Exception as e:
+                    logger.warning(f"Failed to initialize cache manager: {e}")
+            
+            # Initialize executors
+            self._initialize_executors()
+            
+            # Set up initial metrics
+            self.update_metric('strategy', self.strategy.value)
+            self.update_metric('max_queue_size', self.max_queue_size)
+            self.update_metric('executors_count', len(self._executors))
+            self.update_metric('gpu_monitoring_enabled', self.enable_gpu_monitoring)
+            self.update_metric('caching_enabled', self.enable_caching)
+            self.update_metric('initialization_time', time.time())
+            
+            # Start scheduler loop
+            self._start_scheduler_loop()
+            
+            logger.info(f"TaskScheduler initialization completed with {self.strategy.value} strategy")
+            return True
+            
+        except Exception as e:
+            logger.error(f"TaskScheduler initialization failed: {e}")
+            return False
+    
+    def cleanup(self) -> None:
+        """
+        Cleanup task scheduler resources - implements BaseManager abstract method
+        """
+        try:
+            # Stop scheduler loop
+            self._stop_scheduler_loop()
+            
+            # Shutdown all executors
+            for executor in self._executors.values():
+                executor.shutdown()
+            
+            # Clear task data
+            self._task_futures.clear()
+            self._task_results.clear()
+            self._executors.clear()
+            
+            # Update final metrics
+            self.update_metric('cleanup_time', time.time())
+            
+            logger.info("TaskScheduler cleanup completed")
+            
+        except Exception as e:
+            logger.error(f"Error during TaskScheduler cleanup: {e}")
+    
+    def perform_health_check(self) -> HealthCheckResult:
+        """
+        Perform comprehensive health check
+        
+        Returns:
+            Health check result with detailed status
+        """
+        start_time = time.time()
+        
+        try:
+            # Check basic state
+            if self.state not in [ManagerState.RUNNING, ManagerState.READY]:
+                return HealthCheckResult(
+                    status=HealthStatus.CRITICAL,
+                    message=f"TaskScheduler not running (state: {self.state.value})",
+                    details={'state': self.state.value},
+                    timestamp=time.time(),
+                    check_duration=time.time() - start_time
+                )
+            
+            # Check scheduler loop
+            scheduler_healthy = self._scheduler_running and (
+                self._scheduler_thread and self._scheduler_thread.is_alive()
+            )
+            
+            # Check task queue
+            queue_size = self._task_queue.qsize() if self._task_queue else 0
+            queue_full = queue_size >= self.max_queue_size * 0.9
+            
+            # Check executors
+            available_executors = sum(1 for e in self._executors.values() if e.is_available)
+            total_executors = len(self._executors)
+            
+            # Check average queue wait time
+            avg_wait_time = (sum(self.queue_wait_times) / len(self.queue_wait_times)
+                           if self.queue_wait_times else 0)
+            
+            # Check success rate
+            total_processed = self.total_tasks_completed + self.total_tasks_failed
+            success_rate = (self.total_tasks_completed / total_processed 
+                          if total_processed > 0 else 1.0)
+            
+            # Determine health status
+            if not scheduler_healthy:
+                status = HealthStatus.CRITICAL
+                message = "Scheduler loop not running"
+            elif total_executors == 0:
+                status = HealthStatus.CRITICAL
+                message = "No executors available"
+            elif queue_full:
+                status = HealthStatus.WARNING
+                message = f"Queue nearly full: {queue_size}/{self.max_queue_size}"
+            elif available_executors == 0:
+                status = HealthStatus.WARNING
+                message = "No available executors"
+            elif avg_wait_time > 10.0:  # 10 seconds
+                status = HealthStatus.WARNING
+                message = f"High queue wait time: {avg_wait_time:.1f}s"
+            elif success_rate < 0.9:  # Less than 90% success
+                status = HealthStatus.WARNING
+                message = f"Low success rate: {success_rate:.1%}"
+            else:
+                status = HealthStatus.HEALTHY
+                message = f"Scheduler healthy - {available_executors}/{total_executors} executors available"
+            
+            details = {
+                'scheduler_running': scheduler_healthy,
+                'queue_size': queue_size,
+                'max_queue_size': self.max_queue_size,
+                'available_executors': available_executors,
+                'total_executors': total_executors,
+                'avg_wait_time': avg_wait_time,
+                'success_rate': success_rate,
+                'total_scheduled': self.total_tasks_scheduled,
+                'total_completed': self.total_tasks_completed,
+                'total_failed': self.total_tasks_failed
+            }
+            
+            return HealthCheckResult(
+                status=status,
+                message=message,
+                details=details,
+                timestamp=time.time(),
+                check_duration=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return HealthCheckResult(
+                status=HealthStatus.CRITICAL,
+                message=f"Health check failed: {e}",
+                details={'error': str(e)},
+                timestamp=time.time(),
+                check_duration=time.time() - start_time
+            )
     
     def _initialize_executors(self):
         """Initialize task executors for available devices"""
@@ -371,16 +521,112 @@ class TaskScheduler:
         
         logger.info(f"Initialized {len(self._executors)} task executors")
     
-    def _select_executor(self, task: TaskRequest) -> Optional[TaskExecutor]:
-        """
-        Select best executor for a task
+    def _start_scheduler_loop(self):
+        """Start the scheduler loop"""
+        if self._scheduler_running:
+            return
         
-        Args:
-            task: Task to schedule
-            
-        Returns:
-            Selected executor or None if none available
-        """
+        self._scheduler_running = True
+        self._scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self._scheduler_thread.start()
+        
+        self.update_metric('scheduler_started', time.time())
+        logger.info("Task scheduler loop started")
+    
+    def _stop_scheduler_loop(self):
+        """Stop the scheduler loop"""
+        if not self._scheduler_running:
+            return
+        
+        self._scheduler_running = False
+        
+        if self._scheduler_thread and self._scheduler_thread.is_alive():
+            self._scheduler_thread.join(timeout=10.0)
+        
+        self.update_metric('scheduler_stopped', time.time())
+        logger.info("Task scheduler loop stopped")
+    
+    def _scheduler_loop(self):
+        """Main scheduler loop"""
+        logger.info("Task scheduler loop started")
+        
+        while self._scheduler_running:
+            try:
+                # Get next task from queue (with timeout to allow shutdown)
+                try:
+                    task = self._task_queue.get(timeout=1.0)
+                except Empty:
+                    continue
+                
+                # Select executor
+                executor = self._select_executor(task)
+                if not executor:
+                    # No available executor, put task back in queue
+                    self._task_queue.put(task)
+                    time.sleep(0.1)  # Brief delay before retry
+                    continue
+                
+                # Calculate queue wait time
+                queue_wait_time = time.time() - task.created_at
+                self.queue_wait_times.append(queue_wait_time)
+                if len(self.queue_wait_times) > 1000:  # Keep last 1000 measurements
+                    self.queue_wait_times.pop(0)
+                
+                # Execute task
+                try:
+                    future = executor.execute_task(task)
+                    
+                    with self._scheduler_lock:
+                        self._task_futures[task.task_id] = future
+                    
+                    # Set up completion callback
+                    def task_complete_callback(task_id: str, fut: Future):
+                        try:
+                            result = fut.result()
+                            with self._scheduler_lock:
+                                self._task_results[task_id] = result
+                                self._task_futures.pop(task_id, None)
+                            
+                            if result.success:
+                                self.total_tasks_completed += 1
+                                self.increment_metric('tasks_completed')
+                            else:
+                                self.total_tasks_failed += 1
+                                self.increment_metric('tasks_failed')
+                            
+                            logger.debug(f"Task {task_id} completed with status {result.status.value}")
+                            
+                        except Exception as e:
+                            logger.error(f"Error in task completion callback: {e}")
+                    
+                    # Add callback with partial to capture task_id
+                    from functools import partial
+                    callback = partial(task_complete_callback, task.task_id)
+                    future.add_done_callback(lambda f: callback(f))
+                    
+                    logger.debug(f"Task {task.task_id} assigned to executor {executor.executor_id}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to execute task {task.task_id}: {e}")
+                    # Create failed result
+                    failed_result = TaskResult(
+                        task_id=task.task_id,
+                        status=TaskStatus.FAILED,
+                        error=e,
+                        end_time=time.time()
+                    )
+                    with self._scheduler_lock:
+                        self._task_results[task.task_id] = failed_result
+                    self.total_tasks_failed += 1
+                    self.increment_metric('tasks_failed')
+                
+            except Exception as e:
+                logger.error(f"Error in scheduler loop: {e}")
+                self.increment_metric('scheduler_errors')
+                time.sleep(1.0)  # Brief delay on error
+        
+        logger.info("Task scheduler loop stopped")
+    
     def _select_executor(self, task: TaskRequest) -> Optional[TaskExecutor]:
         """
         Select best executor for a task
@@ -444,112 +690,6 @@ class TaskScheduler:
         # Default fallback
         return available_executors[0]
     
-    def _scheduler_loop(self):
-        """Main scheduler loop"""
-        logger.info("Task scheduler loop started")
-        
-        while self._running:
-            try:
-                # Get next task from queue (with timeout to allow shutdown)
-                try:
-                    task = self._task_queue.get(timeout=1.0)
-                except Empty:
-                    continue
-                
-                # Select executor
-                executor = self._select_executor(task)
-                if not executor:
-                    # No available executor, put task back in queue
-                    self._task_queue.put(task)
-                    time.sleep(0.1)  # Brief delay before retry
-                    continue
-                
-                # Calculate queue wait time
-                queue_wait_time = time.time() - task.created_at
-                self.queue_wait_times.append(queue_wait_time)
-                if len(self.queue_wait_times) > 1000:  # Keep last 1000 measurements
-                    self.queue_wait_times.pop(0)
-                
-                # Execute task
-                try:
-                    future = executor.execute_task(task)
-                    
-                    with self._lock:
-                        self._task_futures[task.task_id] = future
-                    
-                    # Set up completion callback
-                    def task_complete_callback(task_id: str, fut: Future):
-                        try:
-                            result = fut.result()
-                            with self._lock:
-                                self._task_results[task_id] = result
-                                self._task_futures.pop(task_id, None)
-                            
-                            if result.success:
-                                self.total_tasks_completed += 1
-                            else:
-                                self.total_tasks_failed += 1
-                            
-                            logger.debug(f"Task {task_id} completed with status {result.status.value}")
-                            
-                        except Exception as e:
-                            logger.error(f"Error in task completion callback: {e}")
-                    
-                    # Add callback with partial to capture task_id
-                    from functools import partial
-                    callback = partial(task_complete_callback, task.task_id)
-                    future.add_done_callback(lambda f: callback(f))
-                    
-                    logger.debug(f"Task {task.task_id} assigned to executor {executor.executor_id}")
-                    
-                except Exception as e:
-                    logger.error(f"Failed to execute task {task.task_id}: {e}")
-                    # Create failed result
-                    failed_result = TaskResult(
-                        task_id=task.task_id,
-                        status=TaskStatus.FAILED,
-                        error=e,
-                        end_time=time.time()
-                    )
-                    with self._lock:
-                        self._task_results[task.task_id] = failed_result
-                    self.total_tasks_failed += 1
-                
-            except Exception as e:
-                logger.error(f"Error in scheduler loop: {e}")
-                time.sleep(1.0)  # Brief delay on error
-        
-        logger.info("Task scheduler loop stopped")
-    
-    def start(self):
-        """Start the task scheduler"""
-        if self._running:
-            logger.warning("Scheduler is already running")
-            return
-        
-        self._running = True
-        self._scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
-        self._scheduler_thread.start()
-        
-        logger.info("Task scheduler started")
-    
-    def stop(self):
-        """Stop the task scheduler"""
-        if not self._running:
-            return
-        
-        logger.info("Stopping task scheduler...")
-        self._running = False
-        
-        if self._scheduler_thread and self._scheduler_thread.is_alive():
-            self._scheduler_thread.join(timeout=10.0)
-        
-        # Shutdown all executors
-        for executor in self._executors.values():
-            executor.shutdown()
-        
-        logger.info("Task scheduler stopped")
-    
     def submit_task(self,
                    model_name: str,
                    method: str,
@@ -603,9 +743,10 @@ class TaskScheduler:
                     end_time=time.time(),
                     execution_time=0.0
                 )
-                with self._lock:
+                with self._scheduler_lock:
                     self._task_results[task_id] = cached_task_result
                 self.total_tasks_completed += 1
+                self.increment_metric('cache_hits')
                 return task_id
         
         # Create task request
@@ -626,6 +767,7 @@ class TaskScheduler:
         try:
             self._task_queue.put(task, block=False)
             self.total_tasks_scheduled += 1
+            self.increment_metric('tasks_scheduled')
             logger.debug(f"Task {task_id} queued for execution")
             return task_id
             
@@ -646,7 +788,7 @@ class TaskScheduler:
         start_time = time.time()
         
         while True:
-            with self._lock:
+            with self._scheduler_lock:
                 # Check if result is ready
                 if task_id in self._task_results:
                     result = self._task_results[task_id]
@@ -673,42 +815,9 @@ class TaskScheduler:
             
             time.sleep(0.1)  # Brief delay before checking again
     
-    def cancel_task(self, task_id: str) -> bool:
-        """
-        Cancel a task
-        
-        Args:
-            task_id: Task ID to cancel
-            
-        Returns:
-            True if task was cancelled
-        """
-        with self._lock:
-            # Check if task is in results (already completed)
-            if task_id in self._task_results:
-                return False
-            
-            # Check if task is running
-            if task_id in self._task_futures:
-                future = self._task_futures[task_id]
-                cancelled = future.cancel()
-                if cancelled:
-                    self._task_futures.pop(task_id, None)
-                    # Create cancelled result
-                    cancelled_result = TaskResult(
-                        task_id=task_id,
-                        status=TaskStatus.CANCELLED,
-                        end_time=time.time()
-                    )
-                    self._task_results[task_id] = cancelled_result
-                    logger.info(f"Task {task_id} cancelled")
-                return cancelled
-        
-        return False
-    
     def get_queue_status(self) -> dict:
         """Get current queue status"""
-        with self._lock:
+        with self._scheduler_lock:
             running_tasks = len(self._task_futures)
             completed_tasks = len([r for r in self._task_results.values() 
                                  if r.status == TaskStatus.COMPLETED])
@@ -719,163 +828,20 @@ class TaskScheduler:
                             if self.queue_wait_times else 0)
             
             return {
-                'queue_size': self._task_queue.qsize(),
+                'queue_size': self._task_queue.qsize() if self._task_queue else 0,
                 'max_queue_size': self.max_queue_size,
                 'running_tasks': running_tasks,
                 'completed_tasks': completed_tasks,
                 'failed_tasks': failed_tasks,
                 'total_scheduled': self.total_tasks_scheduled,
                 'average_queue_wait_time': avg_queue_wait,
-                'scheduler_running': self._running
+                'scheduler_running': self._scheduler_running
             }
     
     def get_executor_stats(self) -> Dict[str, dict]:
         """Get statistics for all executors"""
         return {executor_id: executor.get_stats() 
                 for executor_id, executor in self._executors.items()}
-    
-    def get_system_stats(self) -> dict:
-        """Get comprehensive system statistics"""
-        queue_status = self.get_queue_status()
-        executor_stats = self.get_executor_stats()
-        
-        # Calculate system-wide metrics
-        total_executor_load = sum(stats['current_load'] for stats in executor_stats.values())
-        avg_executor_load = total_executor_load / len(executor_stats) if executor_stats else 0
-        
-        total_success_rate = (queue_status['completed_tasks'] / 
-                            (queue_status['completed_tasks'] + queue_status['failed_tasks'])
-                            if (queue_status['completed_tasks'] + queue_status['failed_tasks']) > 0 else 0)
-        
-        stats = {
-            'scheduler': {
-                'strategy': self.strategy.value,
-                'running': self._running,
-                'total_executors': len(self._executors),
-                'average_executor_load': avg_executor_load,
-                'success_rate': total_success_rate
-            },
-            'queue': queue_status,
-            'executors': executor_stats
-        }
-        
-        # Add GPU information if available
-        if self.gpu_monitor:
-            stats['gpu'] = self.gpu_monitor.get_device_utilization_summary()
-        
-        return stats
-    
-    def optimize_performance(self) -> Dict[str, Any]:
-        """
-        Analyze performance and provide optimization recommendations
-        
-        Returns:
-            Performance analysis and recommendations
-        """
-        stats = self.get_system_stats()
-        recommendations = {
-            'analysis': {},
-            'recommendations': [],
-            'warnings': []
-        }
-        
-        # Analyze queue performance
-        queue_size = stats['queue']['queue_size']
-        avg_wait_time = stats['queue']['average_queue_wait_time']
-        
-        if queue_size > self.max_queue_size * 0.8:
-            recommendations['warnings'].append(
-                f"Queue is {queue_size / self.max_queue_size * 100:.1f}% full"
-            )
-            recommendations['recommendations'].append(
-                "Consider increasing executor capacity or optimizing task processing"
-            )
-        
-        if avg_wait_time > 5.0:  # 5 seconds
-            recommendations['warnings'].append(
-                f"High average queue wait time: {avg_wait_time:.2f}s"
-            )
-            recommendations['recommendations'].append(
-                "Consider adding more executors or optimizing task scheduling strategy"
-            )
-        
-        # Analyze executor performance
-        executor_loads = [stats['executors'][eid]['current_load'] 
-                         for eid in stats['executors']]
-        max_load = max(executor_loads) if executor_loads else 0
-        min_load = min(executor_loads) if executor_loads else 0
-        load_variance = max_load - min_load
-        
-        if load_variance > 0.5:  # High load imbalance
-            recommendations['warnings'].append(
-                f"High load imbalance across executors: {load_variance:.2f}"
-            )
-            recommendations['recommendations'].append(
-                "Consider switching to LOAD_BALANCED scheduling strategy"
-            )
-        
-        # Analyze success rate
-        success_rate = stats['scheduler']['success_rate']
-        if success_rate < 0.95:  # Less than 95% success
-            recommendations['warnings'].append(
-                f"Low task success rate: {success_rate * 100:.1f}%"
-            )
-            recommendations['recommendations'].append(
-                "Investigate task failures and consider adjusting timeout settings"
-            )
-        
-        # GPU-specific recommendations
-        if self.gpu_monitor:
-            gpu_recommendations = self.gpu_monitor.get_device_recommendations()
-            recommendations['recommendations'].extend(gpu_recommendations['suggestions'])
-            recommendations['warnings'].extend(gpu_recommendations['warnings'])
-        
-        recommendations['analysis'] = {
-            'queue_utilization': queue_size / self.max_queue_size,
-            'average_wait_time': avg_wait_time,
-            'executor_load_variance': load_variance,
-            'success_rate': success_rate,
-            'total_tasks_processed': stats['queue']['completed_tasks'] + stats['queue']['failed_tasks']
-        }
-        
-        return recommendations
-    
-    def cleanup_completed_tasks(self, max_age_hours: float = 24.0):
-        """
-        Clean up old completed task results
-        
-        Args:
-            max_age_hours: Maximum age for keeping results in hours
-        """
-        current_time = time.time()
-        max_age_seconds = max_age_hours * 3600
-        
-        with self._lock:
-            completed_task_ids = []
-            for task_id, result in self._task_results.items():
-                if (result.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED] and
-                    result.end_time and (current_time - result.end_time) > max_age_seconds):
-                    completed_task_ids.append(task_id)
-            
-            for task_id in completed_task_ids:
-                self._task_results.pop(task_id, None)
-        
-        if completed_task_ids:
-            logger.info(f"Cleaned up {len(completed_task_ids)} old task results")
-    
-    def shutdown(self):
-        """Shutdown the scheduler"""
-        logger.info("Shutting down task scheduler...")
-        self.stop()
-        
-        # Clean up resources
-        if self.gpu_monitor:
-            self.gpu_monitor.shutdown()
-        
-        if self.cache_manager:
-            self.cache_manager.shutdown()
-        
-        logger.info("Task scheduler shutdown complete")
 
 
 # Global scheduler instance
@@ -897,6 +863,9 @@ def get_scheduler(model_manager: Any = None, **kwargs) -> TaskScheduler:
         if model_manager is None:
             raise ValueError("model_manager is required for scheduler initialization")
         _scheduler = TaskScheduler(model_manager, **kwargs)
+        # Auto-start the scheduler
+        if not _scheduler.start():
+            logger.error("Failed to start TaskScheduler")
     return _scheduler
 
 

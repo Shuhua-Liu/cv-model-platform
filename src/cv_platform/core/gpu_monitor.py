@@ -1,8 +1,8 @@
 """
-GPU Monitor - GPU resource monitoring and management
+Enhanced GPU Monitor - Inheriting from BaseManager
 
-Provides real-time GPU monitoring, memory tracking, device selection,
-and performance optimization for model execution.
+GPU resource monitor and manager with full BaseManager integration
+for state management, health monitoring, and lifecycle management.
 """
 
 import time
@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Any, Union, NamedTuple
 from dataclasses import dataclass
 from enum import Enum
 from loguru import logger
+
+from .base_manager import BaseManager, ManagerState, HealthStatus, HealthCheckResult
 
 try:
     import torch
@@ -21,13 +23,12 @@ except ImportError:
 
 try:
     import pynvml
-    # Try to initialize NVML
-    pynvml.nvmlInit()
     NVML_AVAILABLE = True
-except (ImportError, Exception) as e:
+    # pynvml.nvmlInit()
+except ImportError:
     NVML_AVAILABLE = False
-    logger.info("NVIDIA Management Library not available - detailed GPU info unavailable")
-    logger.debug(f"NVML error: {e}")
+    pynvml = None
+    logger.warning("nvidia-ml-py not available - detailed GPU info unavailable")
 
 try:
     import psutil
@@ -77,25 +78,28 @@ class GPUUtilization:
     fan_speed_percent: Optional[float] = None
 
 
-class GPUMonitor:
-    """GPU resource monitor and manager"""
+class GPUMonitor(BaseManager):
+    """Enhanced GPU resource monitor inheriting from BaseManager"""
     
     def __init__(self, 
                  monitoring_interval: float = 1.0,
                  enable_background_monitoring: bool = True,
                  memory_threshold: float = 0.9):
         """
-        Initialize GPU monitor
+        Initialize GPU monitor with BaseManager capabilities
         
         Args:
             monitoring_interval: Monitoring update interval in seconds
             enable_background_monitoring: Enable continuous monitoring
             memory_threshold: Memory usage threshold for warnings (0.0-1.0)
         """
+        super().__init__("GPUMonitor")
+        
         self.monitoring_interval = monitoring_interval
         self.memory_threshold = memory_threshold
+        self.enable_background_monitoring = enable_background_monitoring
         
-        # Device information
+        # Device information (will be initialized in initialize() method)
         self._devices: Dict[int, GPUInfo] = {}
         self._current_device: Optional[int] = None
         
@@ -107,15 +111,138 @@ class GPUMonitor:
         # Background monitoring
         self._monitoring_active = False
         self._monitor_thread = None
-        self._lock = threading.RLock()
+        self._monitoring_lock = threading.RLock()
         
-        # Initialize
-        self._discover_devices()
+        logger.info("GPUMonitor initialized with BaseManager capabilities")
+    
+    def initialize(self) -> bool:
+        """
+        Initialize GPU monitor - implements BaseManager abstract method
         
-        if enable_background_monitoring:
-            self.start_monitoring()
+        Returns:
+            True if initialization successful, False otherwise
+        """
+        try:
+            # Discover available devices
+            self._discover_devices()
+            
+            # Set up initial metrics
+            self.update_metric('devices_discovered', len(self._devices))
+            self.update_metric('torch_available', TORCH_AVAILABLE)
+            self.update_metric('nvml_available', NVML_AVAILABLE)
+            self.update_metric('monitoring_interval', self.monitoring_interval)
+            self.update_metric('initialization_time', time.time())
+            
+            # Start background monitoring if enabled
+            if self.enable_background_monitoring:
+                self.start_monitoring()
+            
+            logger.info(f"GPUMonitor initialization completed - Found {len(self._devices)} GPU(s)")
+            return True
+            
+        except Exception as e:
+            logger.error(f"GPUMonitor initialization failed: {e}")
+            return False
+    
+    def cleanup(self) -> None:
+        """
+        Cleanup GPU monitor resources - implements BaseManager abstract method
+        """
+        try:
+            # Stop background monitoring
+            self.stop_monitoring()
+            
+            # Clear device information
+            self._devices.clear()
+            self._memory_history.clear()
+            self._utilization_history.clear()
+            
+            # Update final metrics
+            self.update_metric('cleanup_time', time.time())
+            
+            logger.info("GPUMonitor cleanup completed")
+            
+        except Exception as e:
+            logger.error(f"Error during GPUMonitor cleanup: {e}")
+    
+    def perform_health_check(self) -> HealthCheckResult:
+        """
+        Perform comprehensive health check
         
-        logger.info(f"GPU monitor initialized - Found {len(self._devices)} GPU(s)")
+        Returns:
+            Health check result with detailed status
+        """
+        start_time = time.time()
+        
+        try:
+            # Check basic state
+            if self.state not in [ManagerState.RUNNING, ManagerState.READY]:
+                return HealthCheckResult(
+                    status=HealthStatus.CRITICAL,
+                    message=f"GPUMonitor not running (state: {self.state.value})",
+                    details={'state': self.state.value},
+                    timestamp=time.time(),
+                    check_duration=time.time() - start_time
+                )
+            
+            # Check device availability
+            available_devices = sum(1 for device in self._devices.values() if device.is_available)
+            total_devices = len(self._devices)
+            
+            # Check memory usage
+            high_memory_devices = []
+            if self._devices:
+                for device_id in self._devices.keys():
+                    memory_info = self._collect_memory_info(device_id)
+                    if memory_info and memory_info.utilization_percent > self.memory_threshold * 100:
+                        high_memory_devices.append(device_id)
+            
+            # Check monitoring status
+            monitoring_healthy = self._monitoring_active == self.enable_background_monitoring
+            
+            # Determine health status
+            if not TORCH_AVAILABLE and not NVML_AVAILABLE:
+                status = HealthStatus.WARNING
+                message = "No GPU monitoring libraries available"
+            elif total_devices == 0:
+                status = HealthStatus.WARNING
+                message = "No GPU devices detected"
+            elif high_memory_devices:
+                status = HealthStatus.WARNING
+                message = f"High memory usage on devices: {high_memory_devices}"
+            elif not monitoring_healthy:
+                status = HealthStatus.WARNING
+                message = "Background monitoring not active"
+            else:
+                status = HealthStatus.HEALTHY
+                message = f"{available_devices}/{total_devices} devices available"
+            
+            details = {
+                'total_devices': total_devices,
+                'available_devices': available_devices,
+                'high_memory_devices': high_memory_devices,
+                'monitoring_active': self._monitoring_active,
+                'torch_available': TORCH_AVAILABLE,
+                'nvml_available': NVML_AVAILABLE,
+                'current_device': self._current_device
+            }
+            
+            return HealthCheckResult(
+                status=status,
+                message=message,
+                details=details,
+                timestamp=time.time(),
+                check_duration=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return HealthCheckResult(
+                status=HealthStatus.CRITICAL,
+                message=f"Health check failed: {e}",
+                details={'error': str(e)},
+                timestamp=time.time(),
+                check_duration=time.time() - start_time
+            )
     
     def _discover_devices(self):
         """Discover available GPU devices"""
@@ -155,7 +282,7 @@ class GPUMonitor:
                     logger.error(f"Error discovering GPU {device_id}: {e}")
         
         # Check MPS availability (Apple Silicon)
-        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             # MPS is treated as device ID -1 for identification
             mps_info = GPUInfo(
                 device_id=-1,
@@ -166,20 +293,10 @@ class GPUMonitor:
             self._devices[-1] = mps_info
             self._memory_history[-1] = []
             self._utilization_history[-1] = []
-            logger.info("Discovered Apple MPS device")
-        else:
-            # No GPU devices available
-            logger.info("No GPU devices found - running in CPU-only mode")
-            # Add a virtual CPU device for consistency
-            cpu_info = GPUInfo(
-                device_id=-2,
-                name="CPU",
-                total_memory_mb=self._get_system_memory_mb(),
-                is_available=True
-            )
-            self._devices[-2] = cpu_info
-            self._memory_history[-2] = []
-            self._utilization_history[-2] = []
+            logger.debug("Discovered Apple MPS device")
+        
+        # Update metrics
+        self.update_metric('devices_discovered', len(self._devices))
     
     def _get_mps_memory_info(self) -> float:
         """Get MPS memory information"""
@@ -192,19 +309,17 @@ class GPUMonitor:
         except Exception:
             return 8192.0
     
-    def _get_system_memory_mb(self) -> float:
-        """Get system memory in MB"""
-        try:
-            if PSUTIL_AVAILABLE:
-                memory = psutil.virtual_memory()
-                return memory.total / (1024 * 1024)  # Convert to MB
-            return 8192.0  # Default assumption of 8GB
-        except Exception:
-            return 8192.0
-    
     def _get_nvidia_info(self, device_id: int) -> Optional[Dict[str, Any]]:
         """Get detailed NVIDIA GPU information using nvidia-ml-py"""
         if not NVML_AVAILABLE:
+            return None
+        
+        try:
+            if not hasattr(self, '_nvml_initialized'):
+                pynvml.nvmlInit()
+                self._nvml_initialized = True
+        except Exception as e:
+            logger.warning(f"Failed to initialize NVML: {e}")
             return None
         
         try:
@@ -336,7 +451,7 @@ class GPUMonitor:
         """Background monitoring loop"""
         while self._monitoring_active:
             try:
-                with self._lock:
+                with self._monitoring_lock:
                     for device_id in self._devices.keys():
                         # Collect memory info
                         memory_info = self._collect_memory_info(device_id)
@@ -350,6 +465,7 @@ class GPUMonitor:
                             if memory_info.utilization_percent > self.memory_threshold * 100:
                                 logger.warning(f"GPU {device_id} memory usage high: "
                                              f"{memory_info.utilization_percent:.1f}%")
+                                self.increment_metric('memory_warnings')
                         
                         # Collect utilization info
                         util_info = self._collect_utilization_info(device_id)
@@ -359,10 +475,15 @@ class GPUMonitor:
                             if len(history) > self._max_history_length:
                                 history.pop(0)
                 
+                # Update monitoring metrics
+                self.increment_metric('monitoring_cycles')
+                self.update_metric('last_monitoring_time', time.time())
+                
                 time.sleep(self.monitoring_interval)
                 
             except Exception as e:
                 logger.error(f"Error in GPU monitoring loop: {e}")
+                self.increment_metric('monitoring_errors')
                 time.sleep(self.monitoring_interval)
     
     def start_monitoring(self):
@@ -370,20 +491,24 @@ class GPUMonitor:
         if self._monitoring_active:
             return
         
-        self._monitoring_active = True
-        self._monitor_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
-        self._monitor_thread.start()
-        logger.info("GPU monitoring started")
+        with self._monitoring_lock:
+            self._monitoring_active = True
+            self._monitor_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
+            self._monitor_thread.start()
+            self.update_metric('monitoring_started', time.time())
+            logger.info("GPU monitoring started")
     
     def stop_monitoring(self):
         """Stop background monitoring"""
         if not self._monitoring_active:
             return
         
-        self._monitoring_active = False
-        if self._monitor_thread and self._monitor_thread.is_alive():
-            self._monitor_thread.join(timeout=5.0)
-        logger.info("GPU monitoring stopped")
+        with self._monitoring_lock:
+            self._monitoring_active = False
+            if self._monitor_thread and self._monitor_thread.is_alive():
+                self._monitor_thread.join(timeout=5.0)
+            self.update_metric('monitoring_stopped', time.time())
+            logger.info("GPU monitoring stopped")
     
     def get_devices(self) -> Dict[int, GPUInfo]:
         """Get all available GPU devices"""
@@ -425,40 +550,6 @@ class GPUMonitor:
         return {did: self._collect_utilization_info(did) 
                 for did in self._devices.keys()}
     
-    def get_memory_history(self, device_id: int, samples: Optional[int] = None) -> List[GPUMemoryInfo]:
-        """
-        Get memory usage history for a device
-        
-        Args:
-            device_id: Device ID
-            samples: Number of recent samples (None for all)
-            
-        Returns:
-            List of memory info samples
-        """
-        with self._lock:
-            history = self._memory_history.get(device_id, [])
-            if samples is None:
-                return history.copy()
-            return history[-samples:] if samples > 0 else []
-    
-    def get_utilization_history(self, device_id: int, samples: Optional[int] = None) -> List[GPUUtilization]:
-        """
-        Get utilization history for a device
-        
-        Args:
-            device_id: Device ID
-            samples: Number of recent samples (None for all)
-            
-        Returns:
-            List of utilization samples
-        """
-        with self._lock:
-            history = self._utilization_history.get(device_id, [])
-            if samples is None:
-                return history.copy()
-            return history[-samples:] if samples > 0 else []
-    
     def select_best_device(self, 
                           memory_required_mb: float = 0,
                           prefer_empty: bool = True,
@@ -496,6 +587,7 @@ class GPUMonitor:
         
         if not available_devices:
             logger.warning("No suitable GPU device found")
+            self.increment_metric('device_selection_failures')
             return None
         
         # Sort by preference
@@ -507,6 +599,7 @@ class GPUMonitor:
             available_devices.sort(key=lambda x: x[1].free_mb)
         
         best_device_id = available_devices[0][0]
+        self.increment_metric('device_selections')
         logger.info(f"Selected GPU device {best_device_id}")
         return best_device_id
     
@@ -533,6 +626,7 @@ class GPUMonitor:
                 if torch.backends.mps.is_available():
                     # MPS doesn't need explicit device setting like CUDA
                     self._current_device = device_id
+                    self.update_metric('current_device', device_id)
                     logger.info("Set device to MPS")
                     return True
                 else:
@@ -541,6 +635,7 @@ class GPUMonitor:
             else:
                 torch.cuda.set_device(device_id)
                 self._current_device = device_id
+                self.update_metric('current_device', device_id)
                 logger.info(f"Set CUDA device to {device_id}")
                 return True
         
@@ -571,7 +666,6 @@ class GPUMonitor:
             device_id: Device ID to clear, or None for current device
         """
         if not TORCH_AVAILABLE:
-            logger.info("PyTorch not available - memory clear skipped")
             return
         
         try:
@@ -579,20 +673,16 @@ class GPUMonitor:
                 # MPS doesn't have explicit cache clearing
                 logger.info("MPS cache clearing not available")
                 return
-            elif device_id == -2:  # CPU device
-                logger.info("CPU memory clear not applicable")
-                return
             
             if device_id is None:
                 device_id = self.get_current_device()
             
-            if device_id is not None and device_id >= 0 and torch.cuda.is_available():
+            if device_id is not None and torch.cuda.is_available():
                 torch.cuda.empty_cache()
-                if device_id < torch.cuda.device_count():
+                if device_id in self._devices:
                     torch.cuda.synchronize(device_id)
+                self.increment_metric('cache_clears')
                 logger.info(f"Cleared memory cache for device {device_id}")
-            else:
-                logger.info("No CUDA devices available for memory clearing")
         
         except Exception as e:
             logger.error(f"Failed to clear memory cache: {e}")
@@ -634,145 +724,6 @@ class GPUMonitor:
             summary['devices'][device_id] = device_summary
         
         return summary
-    
-    def get_device_recommendations(self) -> Dict[str, Any]:
-        """Get device usage recommendations"""
-        recommendations = {
-            'suggestions': [],
-            'warnings': [],
-            'optimal_device': None
-        }
-        
-        device_scores = []
-        
-        for device_id, device_info in self._devices.items():
-            if not device_info.is_available:
-                continue
-            
-            memory_info = self._collect_memory_info(device_id)
-            util_info = self._collect_utilization_info(device_id)
-            
-            if not memory_info:
-                continue
-            
-            # Calculate device score (higher is better)
-            score = 0
-            
-            # Memory availability score (0-40 points)
-            memory_ratio = memory_info.free_mb / memory_info.total_mb
-            score += memory_ratio * 40
-            
-            # Low utilization is better for new tasks (0-30 points)
-            if util_info:
-                util_penalty = util_info.gpu_percent / 100.0
-                score += (1 - util_penalty) * 30
-            else:
-                score += 30  # Assume low utilization if unknown
-            
-            # Temperature consideration (0-20 points)
-            if util_info and util_info.temperature_c:
-                if util_info.temperature_c < 70:
-                    score += 20
-                elif util_info.temperature_c < 80:
-                    score += 10
-                # No points for high temperature
-            else:
-                score += 15  # Neutral score if unknown
-            
-            # Compute capability bonus (0-10 points)
-            if device_info.compute_capability:
-                major, minor = device_info.compute_capability
-                score += min(major * 2 + minor * 0.5, 10)
-            
-            device_scores.append((device_id, score, device_info, memory_info, util_info))
-            
-            # Generate warnings
-            if memory_info.utilization_percent > 90:
-                recommendations['warnings'].append(
-                    f"Device {device_id} ({device_info.name}) memory usage critical: "
-                    f"{memory_info.utilization_percent:.1f}%"
-                )
-            
-            if util_info and util_info.temperature_c and util_info.temperature_c > 85:
-                recommendations['warnings'].append(
-                    f"Device {device_id} ({device_info.name}) temperature high: "
-                    f"{util_info.temperature_c}°C"
-                )
-        
-        # Sort by score and select optimal device
-        if device_scores:
-            device_scores.sort(key=lambda x: x[1], reverse=True)
-            optimal_device_id = device_scores[0][0]
-            recommendations['optimal_device'] = optimal_device_id
-            
-            # Generate suggestions
-            best_device = device_scores[0]
-            recommendations['suggestions'].append(
-                f"Recommended device: {optimal_device_id} ({best_device[2].name}) "
-                f"with {best_device[3].free_mb:.0f}MB free memory"
-            )
-            
-            # Memory optimization suggestions
-            total_allocated = sum(d[3].allocated_mb for d in device_scores)
-            if total_allocated > 1000:  # More than 1GB allocated
-                recommendations['suggestions'].append(
-                    "Consider clearing GPU memory cache if experiencing memory issues"
-                )
-        
-        return recommendations
-    
-    def export_metrics(self, device_id: int, format: str = 'dict') -> Union[Dict, str]:
-        """
-        Export device metrics in various formats
-        
-        Args:
-            device_id: Device ID
-            format: Output format ('dict', 'json', 'csv')
-            
-        Returns:
-            Metrics in requested format
-        """
-        if device_id not in self._devices:
-            raise ValueError(f"Device {device_id} not found")
-        
-        # Collect current data
-        device_info = self._devices[device_id]
-        memory_info = self._collect_memory_info(device_id)
-        util_info = self._collect_utilization_info(device_id)
-        
-        metrics = {
-            'device_id': device_id,
-            'device_name': device_info.name,
-            'timestamp': time.time(),
-            'memory_total_mb': memory_info.total_mb if memory_info else 0,
-            'memory_allocated_mb': memory_info.allocated_mb if memory_info else 0,
-            'memory_free_mb': memory_info.free_mb if memory_info else 0,
-            'memory_utilization_percent': memory_info.utilization_percent if memory_info else 0,
-            'gpu_utilization_percent': util_info.gpu_percent if util_info else 0,
-            'temperature_c': util_info.temperature_c if util_info else None,
-            'power_usage_w': util_info.power_usage_w if util_info else None
-        }
-        
-        if format == 'dict':
-            return metrics
-        elif format == 'json':
-            import json
-            return json.dumps(metrics, indent=2)
-        elif format == 'csv':
-            import csv
-            import io
-            output = io.StringIO()
-            writer = csv.DictWriter(output, fieldnames=metrics.keys())
-            writer.writeheader()
-            writer.writerow(metrics)
-            return output.getvalue()
-        else:
-            raise ValueError(f"Unsupported format: {format}")
-    
-    def shutdown(self):
-        """Shutdown GPU monitor"""
-        self.stop_monitoring()
-        logger.info("GPU monitor shutdown complete")
 
 
 # Global GPU monitor instance
@@ -791,6 +742,9 @@ def get_gpu_monitor(**kwargs) -> GPUMonitor:
     global _gpu_monitor
     if _gpu_monitor is None:
         _gpu_monitor = GPUMonitor(**kwargs)
+        # Auto-start the monitor
+        if not _gpu_monitor.start():
+            logger.error("Failed to start GPUMonitor")
     return _gpu_monitor
 
 

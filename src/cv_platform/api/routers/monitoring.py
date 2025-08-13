@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import PlainTextResponse
 from loguru import logger
 
-from ..models1.responses import APIResponse, HealthCheckResponse, SystemStatusResponse
+from ..models.responses import APIResponse, HealthCheckResponse, SystemStatusResponse
 from ..dependencies.auth import get_current_user, get_admin_user
 from ..dependencies.components import (
     get_manager_registry, get_model_manager, get_scheduler,
@@ -409,7 +409,8 @@ async def trigger_optimization(
     current_user: dict = Depends(get_admin_user),
     scheduler = Depends(get_scheduler),
     model_manager = Depends(get_model_manager),
-    cache_manager = Depends(get_cache_manager)
+    cache_manager = Depends(get_cache_manager),
+    gpu_monitor = Depends(get_gpu_monitor)
 ):
     """
     Trigger system optimization

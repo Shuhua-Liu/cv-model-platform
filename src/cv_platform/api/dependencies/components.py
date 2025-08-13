@@ -4,7 +4,7 @@ Component Dependencies
 Provides access to core platform components through dependency injection.
 """
 
-from typing import Optional
+from typing import Dict, Any, Optional
 from fastapi import HTTPException, Depends
 from loguru import logger
 
@@ -164,7 +164,52 @@ async def get_components_dependencies() -> ComponentDependencies:
         )
     except Exception as e:
         logger.error(f"Failed to get component dependencies: {e}")
+        
+        global_components = get_global_components()
+        if global_components:
+            logger.info("Using global components as fallback")
+            return ComponentDependencies(
+                model_manager=global_components.get("model_manager"),
+                model_detector=global_components.get("model_detector"),
+                scheduler=global_components.get("scheduler"),
+                gpu_monitor=global_components.get("gpu_monitor"),
+                cache_manager=global_components.get("cache_manager"),
+                manager_registry=global_components.get("manager_registry")
+            )
+        
         raise HTTPException(
             status_code=503,
             detail="Core components not available"
         )
+
+# Global components storage for WebSocket support
+_global_components: Dict[str, Any] = {}
+
+def set_global_components(components: Dict[str, Any]):
+    """
+    Set global components for WebSocket support
+    
+    Args:
+        components: Dictionary of initialized components
+    """
+    global _global_components
+    _global_components = components
+    logger.info(f"Global components set for WebSocket: {list(components.keys())}")
+
+def get_global_components() -> Dict[str, Any]:
+    """
+    Get all components for WebSocket dependency injection
+    
+    Returns:
+        Dictionary of all available components
+    """
+    if not _global_components:
+        logger.warning("Global components not yet initialized for WebSocket")
+        return {}
+    
+    return _global_components
+
+# For WebSocket compatibility - non-async versions
+def get_components_dependencies() -> Dict[str, Any]:
+    """Get components for WebSocket (non-async version)"""
+    return get_global_components()

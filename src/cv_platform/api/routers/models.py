@@ -11,8 +11,8 @@ from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query, Depends
 from loguru import logger
 
-from ..models1.responses import APIResponse, ModelInfoResponse, ModelListResponse
-from ..models1.requests import ModelLoadRequest
+from ..models.responses import APIResponse, ModelInfoResponse, ModelListResponse
+from ..models.requests import ModelLoadRequest
 from ..dependencies.auth import get_current_user
 from ..dependencies.components import get_model_manager, get_model_detector, get_cache_manager
 

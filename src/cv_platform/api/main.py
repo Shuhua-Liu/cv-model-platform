@@ -14,10 +14,11 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from loguru import logger
 
 # Add project root to Python path
@@ -105,6 +106,9 @@ async def lifespan(app: FastAPI):
         app_state["components"] = components
         app_state["manager_registry"] = manager_registry
         app_state["start_time"] = time.time()
+
+        from src.cv_platform.api.dependencies.components import set_global_components
+        set_global_components(components)
         
         logger.info("✅ All components started successfully")
         

@@ -586,8 +586,15 @@ class ManagerRegistry:
     def register(self, manager: BaseManager) -> None:
         """Register a manager"""
         with self._lock:
-            self._managers[manager.name] = manager
-        logger.info(f"Registered manager: {manager.name}")
+            # check if BaseManager instance
+            if hasattr(manager, 'name'):
+                self._managers[manager.name] = manager
+                logger.info(f"Registered manager: {manager.name}")
+            else:
+                # If not BaseManager，use class name as name
+                manager_name = manager.__class__.__name__
+                self._managers[manager_name] = manager
+                logger.info(f"Registered component: {manager_name} (not a BaseManager)")
     
     def unregister(self, name: str) -> None:
         """Unregister a manager"""

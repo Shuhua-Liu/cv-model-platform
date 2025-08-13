@@ -9,6 +9,7 @@ with comprehensive validation and security features.
 
 import os
 import uuid
+import time
 import mimetypes
 import zipfile
 import tempfile
@@ -21,8 +22,8 @@ import aiofiles
 from PIL import Image
 import io
 
-from ..models1.responses import APIResponse
-from ..models1.requests import FileUploadMetadata
+from ..models.responses import APIResponse
+from ..models.requests import FileUploadMetadata
 from ..dependencies.auth import get_current_user, verify_permissions
 from ..dependencies.components import get_scheduler, get_model_manager
 
