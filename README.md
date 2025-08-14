@@ -251,9 +251,9 @@ class MyPlugin(BasePlugin):
 
 | Model | Platform | Inference Time | Memory Usage | GPU VRAM |
 |------|------|----------|----------|---------|
-| YOLOv8n | RTX 6000 Ada | 12ms | 256MB | 1.2GB |
-| SAM ViT-H | RTX 6000 Ada | 1.8s | 2.1GB | 8.5GB |
-| SD 2.1 | RTX 6000 Ada | 3.2s | 1.8GB | 6.2GB |
+| YOLOv8n | RTX 6000 | 12ms | 256MB | 1.2GB |
+| SAM ViT-H | RTX 6000 | 1.8s | 2.1GB | 8.5GB |
+| SD 2.1 | RTX 6000 | 3.2s | 1.8GB | 6.2GB |
 
 Full benchmark report: [Performance Report](docs/benchmarks.md)
 
