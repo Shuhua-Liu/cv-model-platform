@@ -175,15 +175,15 @@ def test_sam_segmentation(model_name, image_path, mode="automatic"):
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description='CV Model Platform 图像分割演示')
+    parser = argparse.ArgumentParser(description='CV Model Platform Image Segmentation Demo')
     
     parser.add_argument('--model', '-m',
                       type=str,
-                      help='要使用的模型名称')
+                      help='Name of the model to be used')
     
     parser.add_argument('--image', '-i',
                       type=str,
-                      help='测试图像路径（如果不提供将创建测试图像）')
+                      help='Test image path (if not provided, a test image will be created)')
     
     parser.add_argument('--mode',
                       type=str,
@@ -193,15 +193,15 @@ def main():
     
     parser.add_argument('--list-models', '-l',
                       action='store_true',
-                      help='列出所有可用的分割模型')
+                      help='List all available segmentation models')
     
     parser.add_argument('--test-all',
                       action='store_true',
-                      help='测试所有可用的分割模型')
+                      help='Test all available segmentation models')
     
     parser.add_argument('--verbose', '-v',
                       action='store_true',
-                      help='详细输出')
+                      help='Verbose Output')
     
     args = parser.parse_args()
     
@@ -212,21 +212,21 @@ def main():
         manager = get_model_manager()
         available_models = manager.list_available_models()
         
-        # 筛选分割模型
+        # Screen segmentation model
         segmentation_models = {
             name: info for name, info in available_models.items()
             if info['config'].get('type') == 'segmentation'
         }
         
         if args.list_models:
-            print("\n📋 可用的分割模型:")
+            print("\n📋 Available segmentation model:")
             print("=" * 60)
             
             if not segmentation_models:
-                print("⚠️  未找到分割模型")
-                print("\n💡 建议:")
-                print("   1. 确保模型目录包含分割模型文件")
-                print("   2. 运行模型发现脚本更新配置")
+                print("⚠️  No segmentation model found")
+                print("\n💡 Recommendation:")
+                print("   1. Ensure that the model directory contains partitioned model files.")
+                print("   2. Run model detector script update configuration")
                 return 0
             
             for name, info in segmentation_models.items():
@@ -239,45 +239,45 @@ def main():
                 print(f"   Framework: {framework}")
                 print(f"   Path: {config.get('path', 'unknown')}")
                 
-                # 检查依赖
+                # Check dependencies
                 if framework == 'torchvision':
-                    print("   依赖: torchvision (通常已安装)")
+                    print("   Dependencies: torchvision (usually already installed)")
                 elif framework == 'segment_anything':
-                    print("   依赖: segment-anything (需要安装)")
+                    print("   Dependency: segment-anything (requires installation)")
                 print()
             
             return 0
         
         if not segmentation_models:
-            print("❌ 未找到任何分割模型")
-            print("请运行: python examples/basic_usage/segmentation_demo.py --list-models")
+            print("❌ No segmentation model found")
+            print("Please run: python examples/basic_usage/segmentation_demo.py --list-models")
             return 1
         
-        # 准备测试图像
+        # Prepare test images
         image_path = args.image
         if not image_path:
             image_path = create_test_image()
             if not image_path:
-                logger.error("无法创建测试图像")
+                logger.error("Unable to create test image")
                 return 1
         
         test_image = Path(image_path)
         if not test_image.exists():
-            logger.error(f"测试图像不存在: {test_image}")
+            logger.error(f"Test image does not exist: {test_image}")
             return 1
         
-        print("🚀 CV Model Platform - 图像分割演示")
+        print("🚀 CV Model Platform - Image Segmentation Demo")
         print("=" * 50)
         
         success_count = 0
         total_tests = 0
         
         if args.test_all:
-            # 测试所有分割模型
+            # Test all segmentation models
             for model_name, info in segmentation_models.items():
                 framework = info['config'].get('framework', 'unknown')
                 
-                print(f"\n🧪 测试模型: {model_name}")
+                print(f"\n🧪 Test model: {model_name}")
                 print("-" * 30)
                 
                 total_tests += 1
@@ -287,25 +287,25 @@ def main():
                 elif framework == 'segment_anything':
                     success = test_sam_segmentation(model_name, image_path, args.mode)
                 else:
-                    logger.warning(f"未知框架: {framework}")
+                    logger.warning(f"Unknown framework: {framework}")
                     success = False
                 
                 if success:
                     success_count += 1
                 
         else:
-            # 测试指定模型或第一个可用模型
+            # Test the specified model or the first available model.
             if args.model:
                 if args.model not in segmentation_models:
-                    logger.error(f"模型 {args.model} 不可用")
-                    logger.info("可用的分割模型:")
+                    logger.error(f"Model {args.model} is not available.")
+                    logger.info("Available segmentation models:")
                     for name in segmentation_models.keys():
                         logger.info(f"  - {name}")
                     return 1
                 model_name = args.model
             else:
                 model_name = next(iter(segmentation_models.keys()))
-                logger.info(f"使用第一个可用的分割模型: {model_name}")
+                logger.info(f"Use the first available segmentation model: {model_name}")
             
             framework = segmentation_models[model_name]['config'].get('framework', 'unknown')
             
@@ -316,35 +316,35 @@ def main():
             elif framework == 'segment_anything':
                 success = test_sam_segmentation(model_name, image_path, args.mode)
             else:
-                logger.error(f"不支持的框架: {framework}")
+                logger.error(f"Unsupported frameworks: {framework}")
                 success = False
             
             if success:
                 success_count = 1
         
         print("\n" + "=" * 50)
-        print(f"📊 测试结果: {success_count}/{total_tests} 通过")
+        print(f"📊 Test results: {success_count}/{total_tests} passed")
         
         if success_count > 0:
-            print("🎉 分割演示完成！")
-            print("\n🚀 接下来可以尝试:")
-            print("   1. 使用自己的图像: python examples/basic_usage/segmentation_demo.py -i your_image.jpg")
-            print("   2. 尝试SAM交互模式: python examples/basic_usage/segmentation_demo.py --mode point")
-            print("   3. 测试所有模型: python examples/basic_usage/segmentation_demo.py --test-all")
+            print("🎉 Segmentation demonstration completed！")
+            print("\n🚀 Next you can try:")
+            print("   1. Use your own images: python examples/basic_usage/segmentation_demo.py -i your_image.jpg")
+            print("   2. Try SAM interactive mode: python examples/basic_usage/segmentation_demo.py --mode point")
+            print("   3. Test all models: python examples/basic_usage/segmentation_demo.py --test-all")
             return 0 if success_count == total_tests else 1
         else:
-            print("❌ 分割演示失败")
-            print("\n💡 可能的解决方案:")
-            print("   1. 安装缺少的依赖: pip install segment-anything")
-            print("   2. 检查模型文件路径")
-            print("   3. 运行: python examples/basic_usage/segmentation_demo.py --list-models")
+            print("❌ Segmentation demonstration failed")
+            print("\n💡 Possible solutions:")
+            print("   1. Install missing dependencies: pip install segment-anything")
+            print("   2. Check model file path")
+            print("   3. Run: python examples/basic_usage/segmentation_demo.py --list-models")
             return 1
             
     except KeyboardInterrupt:
-        print("\n用户取消操作")
+        print("\nUser cancel operation")
         return 0
     except Exception as e:
-        logger.error(f"程序异常: {e}")
+        logger.error(f"Program exception: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
