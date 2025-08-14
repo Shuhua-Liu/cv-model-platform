@@ -107,8 +107,11 @@ async def lifespan(app: FastAPI):
         app_state["manager_registry"] = manager_registry
         app_state["start_time"] = time.time()
 
+        components_with_registry = components.copy()
+        components_with_registry["manager_registry"] = manager_registry
+
         from src.cv_platform.api.dependencies.components import set_global_components
-        set_global_components(components)
+        set_global_components(components_with_registry)
         
         logger.info("✅ All components started successfully")
         

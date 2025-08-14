@@ -843,6 +843,39 @@ class TaskScheduler(BaseManager):
         return {executor_id: executor.get_stats() 
                 for executor_id, executor in self._executors.items()}
 
+    def get_system_stats(self) -> dict:
+        """Get comprehensive system statistics"""
+        queue_status = self.get_queue_status()
+        executor_stats = self.get_executor_stats
+
+        # Calculate system-wide metrics
+        total_executor_load = sum(stats['current_load'] for stats in executor_stats.values())
+        avg_executor_load = total_executor_load / len(executor_stats) if executor_stats else 0
+
+        total_success_rate = (queue_status['completed_tasks'] / (queue_status['completed_tasks'] + queue_status['failed_tasks']) if (queue_status['completed_tasks'] + queue_status['failed_tasks']) > 0 else 0)
+
+        stats = {
+            'scheduler': {
+                'strategy': self.strategy.value,
+                'running': self._scheduler_running,
+                'total_executors': len(self._executors),
+                'average_executor_load': avg_executor_load,
+                'success_rate': total_success_rate
+            },
+            'queue': queue_status,
+            'executors': executor_stats
+        }
+
+        # Add GPU information if available
+        if self.gpu_monitor:
+            try:
+                stats['gpu'] = self.gpu_monitor.get_device_utilization_summary()
+            except Exception as e:
+                logger.warning(f"Failed to get GPU stats: {e}")
+                stats['gpu'] = {'error': str(e)}
+        
+        return stats
+
 
 # Global scheduler instance
 _scheduler = None

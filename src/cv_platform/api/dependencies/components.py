@@ -51,6 +51,10 @@ async def get_model_manager():
     Raises:
         HTTPException: If component not available
     """
+    global_components = get_global_components()
+    if global_components and "model_manager" in global_components:
+        return global_components["model_manager"]
+
     return get_component("model_manager")
 
 
@@ -64,6 +68,10 @@ async def get_model_detector():
     Raises:
         HTTPException: If component not available
     """
+    global_components = get_global_components()
+    if global_components and "model_detector" in global_components:
+        return global_components["model_detector"]
+    
     return get_component("model_detector")
 
 
@@ -77,6 +85,10 @@ async def get_scheduler():
     Raises:
         HTTPException: If component not available
     """
+    global_components = get_global_components()
+    if global_components and "scheduler" in global_components:
+        return global_components["scheduler"]
+    
     return get_component("scheduler")
 
 
@@ -90,6 +102,10 @@ async def get_gpu_monitor():
     Raises:
         HTTPException: If component not available
     """
+    global_components = get_global_components()
+    if global_components and "gpu_monitor" in global_components:
+        return global_components["gpu_monitor"]
+    
     return get_component("gpu_monitor")
 
 
@@ -103,6 +119,10 @@ async def get_cache_manager():
     Raises:
         HTTPException: If component not available
     """
+    global_components = get_global_components()
+    if global_components and "cache_manager" in global_components:
+        return global_components["cache_manager"]
+    
     return get_component("cache_manager")
 
 
@@ -116,6 +136,10 @@ async def get_manager_registry():
     Raises:
         HTTPException: If component not available
     """
+    global_components = get_global_components()
+    if global_components and "manager_registry" in global_components:
+        return global_components["manager_registry"]
+    
     app_state = get_app_state()
     registry = app_state.get("manager_registry")
     if registry is None:
