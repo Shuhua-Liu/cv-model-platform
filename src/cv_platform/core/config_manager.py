@@ -1,7 +1,7 @@
 """
-配置管理器 - 处理平台的所有配置需求
+Configuration Manager - Handles all configuration requirements for the platform
 
-支持配置优先级：环境变量 > 用户配置文件 > 默认模板
+Supports configuration priority: Environment variables > User profiles > Default templates
 """
 
 import os
@@ -12,85 +12,85 @@ from loguru import logger
 
 
 class ConfigManager:
-    """配置管理器类"""
+    """Configuration Manager Class"""
     
     def __init__(self, config_dir: Optional[Union[str, Path]] = None):
         """
-        初始化配置管理器
+        Initialize Configuration Manager
         
         Args:
-            config_dir: 配置文件目录，默认为项目根目录下的config文件夹
+            config_dir: Configuration file directory, default is the config folder under the project root directory.
         """
         self.config_dir = Path(config_dir) if config_dir else Path("config")
         self.config_dir.mkdir(parents=True, exist_ok=True)
         
-        # 配置文件路径
+        # Configuration file path
         self.user_models_config = self.config_dir / "models.yaml"
         self.user_platform_config = self.config_dir / "platform.yaml" 
         self.template_models_config = self.config_dir / "models_template.yaml"
         self.template_platform_config = self.config_dir / "platform_template.yaml"
         
-        # 内存中的配置
+        # Configuration in memory
         self._models_config = {}
         self._platform_config = {}
         
-        # 加载配置
+        # Load configuration
         self._load_configs()
     
     def _load_configs(self):
-        """加载所有配置文件"""
-        logger.info("加载配置文件...")
+        """Load all configuration files"""
+        logger.info("Load configuration file...")
         
-        # 加载模型配置
+        # Load model configuration
         self._models_config = self._load_models_config()
         
-        # 加载平台配置
+        # Load platform configuration
         self._platform_config = self._load_platform_config()
         
-        logger.info(f"配置加载完成 - 发现 {len(self._models_config.get('models', {}))} 个模型配置")
+        logger.info(f"Configuration loading complete - {len(self._models_config.get('models', {}))} model configurations found")
     
     def _load_models_config(self) -> Dict[str, Any]:
-        """加载模型配置，支持优先级覆盖"""
+        """Load model configuration, support priority override"""
         config = {}
         
-        # 1. 首先加载模板配置（默认值）
+        # 1. First load the template configuration (default values)
         template_config = self._load_yaml_file(self.template_models_config)
         if template_config:
             config.update(template_config)
-            logger.debug(f"已加载模型模板配置: {self.template_models_config}")
+            logger.debug(f"Model template configuration loaded: {self.template_models_config}")
         
-        # 2. 然后加载用户配置（覆盖默认值）
+        # 2. Then load the user configuration (overwriting the default values).
         user_config = self._load_yaml_file(self.user_models_config)
         if user_config:
             config = self._merge_configs(config, user_config)
-            logger.debug(f"已加载用户模型配置: {self.user_models_config}")
+            logger.debug(f"User model configuration loaded: {self.user_models_config}")
         
-        # 3. 最后应用环境变量（最高优先级）
+        # 3. Finally, apply environment variables (highest priority)
         config = self._apply_env_overrides(config, "models")
         
         return config
     
     def _load_platform_config(self) -> Dict[str, Any]:
-        """加载平台配置"""
+        """Load platform configuration"""
         config = {}
         
-        # 1. 加载模板配置
+        # 1. Load template configuration
         template_config = self._load_yaml_file(self.template_platform_config)
         if template_config:
             config.update(template_config)
         
-        # 2. 加载用户配置
+        # 2. Load user configuration
         user_config = self._load_yaml_file(self.user_platform_config)
         if user_config:
             config = self._merge_configs(config, user_config)
         
-        # 3. 应用环境变量
+        # 3. Application environment variables
         config = self._apply_env_overrides(config, "platform")
         
         return config
     
     def _load_yaml_file(self, file_path: Path) -> Optional[Dict[str, Any]]:
-        """安全加载YAML文件"""
+        """Securely load YAML files"""
         if not file_path.exists():
             return None
             
@@ -98,11 +98,11 @@ class ConfigManager:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            logger.warning(f"无法加载配置文件 {file_path}: {e}")
+            logger.warning(f"Unable to load configuration file {file_path}: {e}")
             return None
     
     def _merge_configs(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-        """深度合并配置字典"""
+        """Deep Merge Configuration Dictionary"""
         result = base.copy()
         
         for key, value in override.items():
@@ -114,10 +114,10 @@ class ConfigManager:
         return result
     
     def _apply_env_overrides(self, config: Dict[str, Any], config_type: str) -> Dict[str, Any]:
-        """应用环境变量覆盖"""
+        """Override application environment variables"""
         env_prefix = "CV_"
         
-        # 通用环境变量映射
+        # General environment variable mapping
         env_mappings = {
             "CV_MODELS_ROOT": ("models_root",),
             "CV_CACHE_DIR": ("cache_dir",),
@@ -128,36 +128,36 @@ class ConfigManager:
             "CV_MAX_BATCH_SIZE": ("inference", "max_batch_size"),
         }
         
-        # 特定模型的环境变量 (CV_MODEL_{MODEL_NAME}_PATH)
+        # Environment variables for specific models (CV_MODEL_{MODEL_NAME}_PATH)
         for env_key, env_value in os.environ.items():
             if env_key.startswith(env_prefix):
                 if env_key in env_mappings:
-                    # 处理预定义的环境变量
+                    # Handling predefined environment variables
                     keys = env_mappings[env_key]
                     self._set_nested_value(config, keys, env_value)
-                    logger.debug(f"应用环境变量覆盖: {env_key} = {env_value}")
+                    logger.debug(f"Override application environment variables: {env_key} = {env_value}")
                 
                 elif env_key.startswith("CV_MODEL_") and env_key.endswith("_PATH"):
-                    # 处理模型路径覆盖: CV_MODEL_YOLOV8_PATH
-                    model_name = env_key[9:-5].lower()  # 移除 CV_MODEL_ 和 _PATH
+                    # Handling model path coverage: CV_MODEL_YOLOV8_PATH
+                    model_name = env_key[9:-5].lower()  # remove CV_MODEL_ 和 _PATH
                     if "models" not in config:
                         config["models"] = {}
                     if model_name not in config["models"]:
                         config["models"][model_name] = {}
                     config["models"][model_name]["path"] = env_value
-                    logger.debug(f"应用模型路径覆盖: {model_name} = {env_value}")
+                    logger.debug(f"Application model path coverage: {model_name} = {env_value}")
         
         return config
     
     def _set_nested_value(self, config: Dict[str, Any], keys: tuple, value: str):
-        """设置嵌套字典的值"""
+        """Set the value of the nested dictionary"""
         current = config
         for key in keys[:-1]:
             if key not in current:
                 current[key] = {}
             current = current[key]
         
-        # 尝试转换数据类型
+        # Try converting the data type.
         final_key = keys[-1]
         if value.lower() in ('true', 'false'):
             current[final_key] = value.lower() == 'true'
@@ -169,31 +169,31 @@ class ConfigManager:
             current[final_key] = value
     
     def get_models_config(self) -> Dict[str, Any]:
-        """获取模型配置"""
+        """Get model configuration"""
         return self._models_config.copy()
     
     def get_platform_config(self) -> Dict[str, Any]:
-        """获取平台配置"""
+        """Get Platform Configuration"""
         return self._platform_config.copy()
     
     def get_model_config(self, model_name: str) -> Optional[Dict[str, Any]]:
-        """获取特定模型的配置"""
+        """Get the configuration for a specific model"""
         models = self._models_config.get("models", {})
         return models.get(model_name)
     
     def get_models_root(self) -> Path:
-        """获取模型根目录"""
-        # 优先级：环境变量 > 配置文件 > 默认值
+        """Get the root directory of the model"""
+        # Priority: Environment variables > Configuration files > Default values
         models_root = (
             os.environ.get("CV_MODELS_ROOT") or
             self._platform_config.get("models_root") or
             self._models_config.get("models_root") or
-            "./cv_models"  # 默认使用相对路径
+            "./cv_models"  # Default to using relative paths
         )
         return Path(models_root)
     
     def get_cache_dir(self) -> Path:
-        """获取缓存目录"""
+        """Get cache directory"""
         cache_dir = (
             os.environ.get("CV_CACHE_DIR") or
             self._platform_config.get("cache_dir") or
@@ -202,27 +202,27 @@ class ConfigManager:
         return Path(cache_dir)
     
     def save_user_config(self, config_type: str, config: Dict[str, Any]):
-        """保存用户配置到文件"""
+        """Save user configuration to file"""
         if config_type == "models":
             config_file = self.user_models_config
         elif config_type == "platform":
             config_file = self.user_platform_config
         else:
-            raise ValueError(f"不支持的配置类型: {config_type}")
+            raise ValueError(f"Unsupported configuration types: {config_type}")
         
         try:
             with open(config_file, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-            logger.info(f"配置已保存到: {config_file}")
+            logger.info(f"Configuration saved to: {config_file}")
         except Exception as e:
-            logger.error(f"保存配置失败 {config_file}: {e}")
+            logger.error(f"Failed to save configuration {config_file}: {e}")
             raise
     
     def create_default_configs(self):
-        """创建默认配置文件模板"""
-        # 创建模型配置模板
+        """Create a default configuration file template"""
+        # Create model configuration template
         models_template = {
-            "models_root": "./cv_models",  # 使用相对路径
+            "models_root": "./cv_models",  # Use relative paths
             "models": {
                 "yolov8n": {
                     "type": "detection",
@@ -240,20 +240,20 @@ class ConfigManager:
                 },
                 "resnet50": {
                     "type": "classification",
-                    "path": "torchvision://resnet50",  # 使用torchvision预训练
+                    "path": "{models_root}/classification/resnet/resnet50-11ad3fa6.pth",  
                     "device": "auto",
-                    "pretrained": True
+                    "pretrained": False
                 },
                 "stable_diffusion": {
                     "type": "generation",
-                    "path": "{models_root}/generation/stable_diffusion/sd_1_5/",
+                    "path": "{models_root}/generation/stable_diffusion/sd_2_1/",
                     "device": "auto",
                     "enable_memory_efficient_attention": True
                 }
             }
         }
         
-        # 创建平台配置模板
+        # Create platform configuration template
         platform_template = {
             "api": {
                 "host": "0.0.0.0",
@@ -280,58 +280,59 @@ class ConfigManager:
             }
         }
         
-        # 保存模板文件
+        # Save template file
         if not self.template_models_config.exists():
             with open(self.template_models_config, 'w', encoding='utf-8') as f:
                 yaml.dump(models_template, f, default_flow_style=False, allow_unicode=True)
-            logger.info(f"创建模型配置模板: {self.template_models_config}")
+            logger.info(f"Create model configuration template: {self.template_models_config}")
         
         if not self.template_platform_config.exists():
             with open(self.template_platform_config, 'w', encoding='utf-8') as f:
                 yaml.dump(platform_template, f, default_flow_style=False, allow_unicode=True)
-            logger.info(f"创建平台配置模板: {self.template_platform_config}")
+            logger.info(f"Create platform configuration template: {self.template_platform_config}")
     
     def reload_configs(self):
-        """重新加载配置"""
-        logger.info("重新加载配置...")
+        """Reload configuration"""
+        logger.info("Reload configuration...")
         self._load_configs()
     
     def validate_config(self) -> Dict[str, list]:
-        """验证配置有效性"""
+        """Verify configuration validity"""
         errors = {"models": [], "platform": []}
         
-        # 验证模型根目录
+        # Verify model root directory
         models_root = self.get_models_root()
         if not models_root.exists():
-            errors["models"].append(f"模型根目录不存在: {models_root}")
+            errors["models"].append(f"The model root directory does not exist: {models_root}")
         
-        # 验证每个模型配置
+        # Validate each model configuration
         models = self._models_config.get("models", {})
         for model_name, model_config in models.items():
             if not isinstance(model_config, dict):
-                errors["models"].append(f"模型 {model_name} 配置格式错误")
+                errors["models"].append(f"Model {model_name} configuration format error")
                 continue
                 
             if "path" not in model_config:
-                errors["models"].append(f"模型 {model_name} 缺少路径配置")
+                errors["models"].append(f"Model {model_name} is missing path configuration.")
                 continue
             
-            # 展开路径模板
+            # Expand path template
             model_path = model_config["path"].format(models_root=models_root)
             model_path = Path(model_path)
             
             if not model_path.exists() and not model_config["path"].startswith("torchvision://"):
-                errors["models"].append(f"模型文件不存在: {model_path}")
+                errors["models"].append(f"Model file does not exist: {model_path}")
         
         return errors
 
 
-# 全局配置管理器实例
+# Global Configuration Manager Instance
 _config_manager = None
 
 def get_config_manager() -> ConfigManager:
-    """获取全局配置管理器实例"""
+    """Get the global configuration manager instance"""
     global _config_manager
     if _config_manager is None:
         _config_manager = ConfigManager()
     return _config_manager
+    
