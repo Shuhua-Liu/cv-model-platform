@@ -1,7 +1,7 @@
 """
-基础模型适配器 - 定义所有模型适配器的接口
+Base Model Adapter - Defines the interface for all model adapters
 
-所有的模型适配器都应该继承BaseModelAdapter类，并实现其抽象方法。
+All model adapters should extend the BaseModelAdapter class and implement its abstract methods.
 """
 
 from abc import ABC, abstractmethod
@@ -14,19 +14,19 @@ from loguru import logger
 
 
 class BaseModelAdapter(ABC):
-    """模型适配器基类"""
+    """Model adapter base class"""
     
     def __init__(self, 
                  model_path: Union[str, Path],
                  device: str = "auto",
                  **kwargs):
         """
-        初始化适配器
-        
+        Initialize the adapter
+
         Args:
-            model_path: 模型文件路径
-            device: 计算设备 (cpu, cuda:0, auto等)
-            **kwargs: 其他模型特定参数
+            model_path: Model file path
+            device: Compute device (cpu, cuda:0, auto, etc.)
+            **kwargs: Other model-specific parameters
         """
         self.model_path = Path(model_path)
         self.device = self._resolve_device(device)
@@ -34,10 +34,10 @@ class BaseModelAdapter(ABC):
         self.is_loaded = False
         self.config = kwargs
         
-        logger.info(f"初始化 {self.__class__.__name__} - 路径: {self.model_path}, 设备: {self.device}")
+        logger.info(f"Initialize {self.__class__.__name__} - path: {self.model_path}, device: {self.device}")
     
     def _resolve_device(self, device: str) -> str:
-        """解析和验证设备"""
+        """Parsing and verifying devices"""
         if device == "auto":
             if torch.cuda.is_available():
                 return "cuda:0" 
@@ -47,48 +47,48 @@ class BaseModelAdapter(ABC):
     
     @abstractmethod
     def load_model(self) -> None:
-        """加载模型到内存"""
+        """Load the model into memory"""
         pass
     
     @abstractmethod
     def predict(self, input_data: Any, **kwargs) -> Any:
-        """执行预测"""
+        """Execute predictions"""
         pass
     
     @abstractmethod
     def preprocess(self, input_data: Any) -> Any:
-        """预处理输入数据"""
+        """Preprocessing input data"""
         pass
     
     @abstractmethod
     def postprocess(self, raw_output: Any, **kwargs) -> Any:
-        """后处理模型输出"""
+        """Post-processing model output"""
         pass
     
     def unload_model(self) -> None:
-        """卸载模型释放内存"""
+        """Unloading models to free up memory"""
         if self.model is not None:
             del self.model
             self.model = None
             self.is_loaded = False
             
-            # 清理GPU缓存
+            # Clear GPU cache
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 
-            logger.info(f"{self.__class__.__name__} 模型已卸载")
+            logger.info(f"{self.__class__.__name__} Model unloaded")
     
     def warmup(self, num_runs: int = 3) -> Dict[str, float]:
-        """模型预热，返回性能指标"""
+        """Model warm-up and return performance indicators"""
         if not self.is_loaded:
             self.load_model()
         
-        # 子类应该重写此方法提供具体的预热逻辑
-        logger.info(f"{self.__class__.__name__} 预热完成")
+        # Subclasses should override this method to provide specific preheating logic
+        logger.info(f"{self.__class__.__name__} Preheating completed")
         return {"warmup_runs": num_runs}
     
     def get_model_info(self) -> Dict[str, Any]:
-        """获取模型信息"""
+        """Get model information"""
         info = {
             "adapter_class": self.__class__.__name__,
             "model_path": str(self.model_path),
@@ -97,7 +97,7 @@ class BaseModelAdapter(ABC):
             "config": self.config
         }
         
-        # 添加模型文件信息
+        # Add model file information
         if self.model_path.exists():
             stat = self.model_path.stat()
             info.update({
@@ -108,23 +108,23 @@ class BaseModelAdapter(ABC):
         return info
     
     def __enter__(self):
-        """上下文管理器入口"""
+        """Context manager entry"""
         if not self.is_loaded:
             self.load_model()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """上下文管理器出口"""
+        """Context Manager Exit"""
         self.unload_model()
     
     def __del__(self):
-        """析构函数 - 确保资源清理"""
+        """Destructors - ensure resource cleanup"""
         if hasattr(self, 'model') and self.model is not None:
             self.unload_model()
 
 
 class DetectionAdapter(BaseModelAdapter):
-    """检测模型适配器基类"""
+    """Detection model adapter base class"""
     
     @abstractmethod
     def predict(self, 
@@ -133,21 +133,21 @@ class DetectionAdapter(BaseModelAdapter):
                 nms_threshold: float = 0.45,
                 **kwargs) -> List[Dict[str, Any]]:
         """
-        执行目标检测
-        
+        Perform object detection
+
         Args:
-            image: 输入图像
-            confidence: 置信度阈值
-            nms_threshold: NMS阈值
-            
+            image: Input image
+            confidence: Confidence threshold
+            nms_threshold: NMS threshold
+
         Returns:
-            检测结果列表，每个结果包含：
+            A list of detection results, each containing:
             {
-                'bbox': [x1, y1, x2, y2],  # 边界框坐标
-                'class': str,               # 类别名称
-                'class_id': int,           # 类别ID
-                'confidence': float,       # 置信度
-                'area': float             # 区域面积
+                'bbox': [x1, y1, x2, y2], # Bounding box coordinates
+                'class': str, # Class name
+                'class_id': int, # Class ID
+                'confidence': float, # Confidence level
+                'area': float # Area of the region
             }
         """
         pass
@@ -156,15 +156,15 @@ class DetectionAdapter(BaseModelAdapter):
                          image: Union[str, Path, Image.Image, np.ndarray],
                          results: List[Dict[str, Any]],
                          save_path: Optional[str] = None) -> Image.Image:
-        """可视化检测结果"""
-        # 默认实现 - 子类可以重写
+        """Visualization of detection results"""
+        # Default implementation - subclasses can override
         if isinstance(image, (str, Path)):
             image = Image.open(image)
         elif isinstance(image, np.ndarray):
             image = Image.fromarray(image)
         
-        # 这里应该添加绘制边界框的逻辑
-        # 简化实现，实际应该使用opencv或PIL绘制
+        # Here you should add the logic for drawing the bounding box
+        # Simplify the implementation, you should actually use opencv or PIL to draw
         
         if save_path:
             image.save(save_path)
@@ -173,33 +173,37 @@ class DetectionAdapter(BaseModelAdapter):
 
 
 class SegmentationAdapter(BaseModelAdapter):
-    """分割模型适配器基类"""
+    """Segmentation model adapter base class"""
     
     @abstractmethod
     def predict(self,
                 image: Union[str, Path, Image.Image, np.ndarray],
                 **kwargs) -> Dict[str, Any]:
         """
-        执行图像分割
-        
+        Perform image segmentation
+
         Args:
-            image: 输入图像
-            
+            image: Input image
+
         Returns:
-            分割结果字典：
+            Segmentation result dictionary:
             {
-                'masks': np.ndarray,       # 分割掩码 [N, H, W]
-                'scores': List[float],     # 分割质量分数
-                'areas': List[float],      # 每个掩码的面积
-                'bbox': List[List[float]], # 每个掩码的边界框
-                'metadata': Dict           # 其他元数据
+                'masks': np.ndarray, # Segmentation masks [N, H, W]
+
+                'scores': List[float], # Segmentation quality scores
+
+                'areas': List[float], # Area of each mask
+
+                'bbox': List[List[float]], # Bounding box of each mask
+
+                'metadata': Dict # Other metadata
             }
         """
         pass
 
 
 class ClassificationAdapter(BaseModelAdapter):
-    """分类模型适配器基类"""
+    """Classification model adapter base class"""
     
     @abstractmethod
     def predict(self,
@@ -207,32 +211,32 @@ class ClassificationAdapter(BaseModelAdapter):
                 top_k: int = 5,
                 **kwargs) -> Dict[str, Any]:
         """
-        执行图像分类
+        Perform image classification
         
         Args:
-            image: 输入图像
-            top_k: 返回前k个预测结果
+            image: Input image
+            top_k: Returns the top k predictions
             
         Returns:
-            分类结果字典：
+            Classification result dictionary:
             {
                 'predictions': [
                     {
-                        'class': str,      # 类别名称
-                        'class_id': int,   # 类别ID
-                        'confidence': float # 置信度
+                        'class': str,      # Class name
+                        'class_id': int,   # Class ID
+                        'confidence': float # Confidence level
                     },
                     ...
                 ],
-                'top_class': str,          # 最高置信度类别
-                'top_confidence': float    # 最高置信度
+                'top_class': str,          # Class with the highest confidence level
+                'top_confidence': float    # Highest confidence level
             }
         """
         pass
 
 
 class GenerationAdapter(BaseModelAdapter):
-    """生成模型适配器基类"""
+    """Generate Model Adapter Base"""
     
     @abstractmethod
     def predict(self,
@@ -244,28 +248,28 @@ class GenerationAdapter(BaseModelAdapter):
                 height: int = 512,
                 **kwargs) -> Dict[str, Any]:
         """
-        执行图像生成
-        
+        Execute image generation
+
         Args:
-            prompt: 正向提示词
-            negative_prompt: 负向提示词
-            num_steps: 推理步数
-            guidance_scale: 引导尺度
-            width: 图像宽度
-            height: 图像高度
-            
+            prompt: Positive prompt
+            negative_prompt: Negative prompt
+            num_steps: Number of inference steps
+            guidance_scale: Guidance scale
+            width: Image width
+            height: Image height
+
         Returns:
-            生成结果字典：
+            Generated result dictionary:
             {
-                'images': List[Image.Image],  # 生成的图像
-                'metadata': Dict              # 生成参数等元数据
+                'images': List[Image.Image], # Generated images
+                'metadata': Dict # Metadata such as generation parameters
             }
         """
         pass
 
 
 class MultimodalAdapter(BaseModelAdapter):
-    """多模态模型适配器基类"""
+    """Multimodal model adapter base class"""
     
     @abstractmethod
     def predict(self,
@@ -273,19 +277,19 @@ class MultimodalAdapter(BaseModelAdapter):
                 text: Optional[str] = None,
                 **kwargs) -> Dict[str, Any]:
         """
-        执行多模态推理
-        
+        Perform multimodal inference
+
         Args:
-            image: 输入图像
-            text: 输入文本（如果需要）
-            
+            image: Input image
+            text: Input text (if required)
+
         Returns:
-            推理结果字典（具体格式依据模型类型）
+            Inference result dictionary (specific format depends on model type)
         """
         pass
 
 
-# 适配器类型映射
+# Adapter Type Mapping
 ADAPTER_TYPE_MAP = {
     'detection': DetectionAdapter,
     'segmentation': SegmentationAdapter, 
@@ -296,5 +300,5 @@ ADAPTER_TYPE_MAP = {
 
 
 def get_adapter_class(model_type: str) -> type:
-    """根据模型类型获取对应的适配器基类"""
+    """Get the corresponding adapter base class according to the model type"""
     return ADAPTER_TYPE_MAP.get(model_type, BaseModelAdapter)
