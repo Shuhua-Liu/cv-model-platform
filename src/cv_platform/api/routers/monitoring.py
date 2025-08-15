@@ -186,78 +186,100 @@ async def get_system_status(
         # Get basic registry status
         registry_status = manager_registry.get_system_status()
         
-        # Get model manager status
-        model_status = model_manager.get_system_status()
-        models_info = model_status.get('models', {})
+        # Get model manager status and safely handle list_available_models()
+        try:
+            available_models = model_manager.list_available_models()
+            if hasattr(available_models, 'values'):
+                # If it's a dict-like object
+                models_list = list(available_models.values())
+            else:
+                # If it's already a list or other iterable
+                models_list = list(available_models) if available_models else []
+        except Exception as e:
+            logger.warning(f"Failed to get available models: {e}")
+            models_list = []
         
-        # Get scheduler status
-        queue_status = scheduler.get_queue_status()
-        executor_stats = scheduler.get_executor_stats()
+        # Get model status safely
+        try:
+            model_status = model_manager.get_system_status()
+            models_info = model_status.get('models', {}) if isinstance(model_status, dict) else {}
+        except Exception as e:
+            logger.warning(f"Failed to get model status: {e}")
+            models_info = {}
         
-        # Get cache statistics
-        cache_stats = cache_manager.get_stats()
+        # Get scheduler status safely
+        try:
+            queue_status = scheduler.get_queue_status()
+        except Exception as e:
+            logger.warning(f"Failed to get queue status: {e}")
+            queue_status = {}
+        
+        try:
+            executor_stats = scheduler.get_executor_stats()
+            # Ensure executor_stats is a dict
+            if not isinstance(executor_stats, dict):
+                executor_stats = {}
+        except Exception as e:
+            logger.warning(f"Failed to get executor stats: {e}")
+            executor_stats = {}
+        
+        # Get cache statistics safely
+        try:
+            cache_stats = cache_manager.get_stats()
+        except Exception as e:
+            logger.warning(f"Failed to get cache stats: {e}")
+            cache_stats = {}
         
         # Get GPU information if requested
-        gpu_info = {}
+        gpu_devices_count = 0
         if include_gpu:
             try:
                 gpu_info = gpu_monitor.get_device_utilization_summary()
+                # Try to count GPU devices
+                if isinstance(gpu_info, dict):
+                    gpu_devices_count = len(gpu_info.get('devices', []))
+                elif isinstance(gpu_info, list):
+                    gpu_devices_count = len(gpu_info)
             except Exception as e:
                 logger.warning(f"Failed to get GPU info: {e}")
-                gpu_info = {"error": f"GPU monitoring unavailable: {e}"}
-        
-        # Get performance metrics if requested
-        performance_metrics = {}
-        if include_performance:
-            performance_metrics = await _collect_performance_metrics(
-                model_manager, scheduler, cache_manager
-            )
+                gpu_devices_count = 0
         
         # Calculate application uptime
         app_start_time = getattr(manager_registry, '_start_time', time.time())
         uptime_seconds = time.time() - app_start_time
         
-        # Prepare system status data
-        status_data = {
-            "api_version": "1.0.0",
-            "uptime_seconds": uptime_seconds,
-            "uptime_formatted": _format_uptime(uptime_seconds),
-            "registry": {
-                "total_managers": registry_status.get('total_managers', 0),
-                "running_managers": registry_status.get('running_managers', 0),
-                "healthy_managers": registry_status.get('healthy_managers', 0)
-            },
-            "models": {
-                "total_available": models_info.get('total', 0),
-                "currently_cached": models_info.get('cached', 0),
-                "available_types": len(set(m.get('type', 'unknown') for m in model_manager.list_available_models().values())),
-                "cache_hit_rate": cache_stats.get('hit_rate', 0.0)
-            },
-            "tasks": {
-                "queue_size": queue_status.get('queue_size', 0),
-                "running_tasks": queue_status.get('running_tasks', 0),
-                "completed_tasks": queue_status.get('completed_tasks', 0),
-                "failed_tasks": queue_status.get('failed_tasks', 0),
-                "average_wait_time": queue_status.get('average_queue_wait_time', 0),
-                "total_executors": len(executor_stats),
-                "active_executors": len([e for e in executor_stats.values() if e.get('running_tasks', 0) > 0])
-            },
-            "cache": {
-                "size_mb": cache_stats.get('size_mb', 0),
-                "max_size_mb": cache_stats.get('max_size_mb', 0),
-                "utilization_percent": cache_stats.get('size_mb', 0) / max(cache_stats.get('max_size_mb', 1), 1) * 100,
-                "entry_count": cache_stats.get('entry_count', 0),
-                "hit_rate": cache_stats.get('hit_rate', 0.0)
-            },
-            "system_resources": await _get_system_resources(),
-            "gpu": gpu_info,
-            "performance": performance_metrics
-        }
+        # Get the count of available model types safely
+        try:
+            available_types_count = len(set(m.get('type', 'unknown') for m in models_list if isinstance(m, dict)))
+        except Exception:
+            available_types_count = 0
+        
+        # Get active executors count safely
+        try:
+            active_executors = len([e for e in executor_stats.values() if isinstance(e, dict) and e.get('running_tasks', 0) > 0])
+        except Exception:
+            active_executors = 0
+        
+        # Create SystemStatus object with all required fields
+        from ..models.responses import SystemStatus
+        
+        system_status = SystemStatus(
+            api_version="1.0.0",
+            uptime_seconds=uptime_seconds,
+            total_managers=registry_status.get('total_managers', 0),
+            healthy_managers=registry_status.get('healthy_managers', 0),
+            models_available=models_info.get('total', len(models_list)),
+            models_cached=models_info.get('cached', 0),
+            active_tasks=queue_status.get('running_tasks', 0),
+            completed_tasks=queue_status.get('completed_tasks', 0),
+            gpu_devices=gpu_devices_count,
+            cache_size_mb=cache_stats.get('size_mb', 0.0)
+        )
         
         return SystemStatusResponse(
             success=True,
             message="System status retrieved successfully",
-            data=status_data
+            data=system_status
         )
         
     except Exception as e:
@@ -630,23 +652,43 @@ async def _check_external_dependencies() -> Dict[str, Any]:
 async def _collect_performance_metrics(model_manager, scheduler, cache_manager) -> Dict[str, Any]:
     """Collect comprehensive performance metrics"""
     try:
-        # Get individual component metrics
-        model_perf = model_manager.get_performance_summary()
-        scheduler_stats = scheduler.get_system_stats()
-        cache_stats = cache_manager.get_stats()
+        # Get individual component metrics safely
+        try:
+            model_perf = model_manager.get_performance_summary()
+        except Exception as e:
+            logger.warning(f"Failed to get model performance: {e}")
+            model_perf = {}
+        
+        try:
+            scheduler_stats = scheduler.get_system_stats()
+        except Exception as e:
+            logger.warning(f"Failed to get scheduler stats: {e}")
+            scheduler_stats = {}
+        
+        try:
+            cache_stats = cache_manager.get_stats()
+        except Exception as e:
+            logger.warning(f"Failed to get cache stats: {e}")
+            cache_stats = {}
+        
+        # Safely extract metrics with defaults
+        model_metrics = model_perf.get('metrics', {}) if isinstance(model_perf, dict) else {}
+        total_load_time = model_metrics.get('total_load_time', {}).get('value', 0) if isinstance(model_metrics.get('total_load_time'), dict) else 0
+        models_loaded = model_metrics.get('models_loaded', {}).get('value', 1) if isinstance(model_metrics.get('models_loaded'), dict) else 1
+        
+        queue_info = scheduler_stats.get('queue', {}) if isinstance(scheduler_stats, dict) else {}
+        scheduler_info = scheduler_stats.get('scheduler', {}) if isinstance(scheduler_stats, dict) else {}
         
         return {
             "models": {
-                "total_load_time": model_perf.get('metrics', {}).get('total_load_time', {}).get('value', 0),
-                "average_load_time": model_perf.get('metrics', {}).get('total_load_time', {}).get('value', 0) / 
-                                   max(model_perf.get('metrics', {}).get('models_loaded', {}).get('value', 1), 1),
+                "total_load_time": total_load_time,
+                "average_load_time": total_load_time / max(models_loaded, 1),
                 "cache_hit_rate": cache_stats.get('hit_rate', 0)
             },
             "scheduler": {
-                "queue_utilization": scheduler_stats.get('queue', {}).get('queue_size', 0) / 
-                                   max(scheduler_stats.get('queue', {}).get('max_queue_size', 1), 1),
-                "average_execution_time": scheduler_stats.get('queue', {}).get('average_queue_wait_time', 0),
-                "success_rate": scheduler_stats.get('scheduler', {}).get('success_rate', 0)
+                "queue_utilization": queue_info.get('queue_size', 0) / max(queue_info.get('max_queue_size', 1), 1),
+                "average_execution_time": queue_info.get('average_queue_wait_time', 0),
+                "success_rate": scheduler_info.get('success_rate', 0)
             },
             "cache": {
                 "utilization_percent": cache_stats.get('size_mb', 0) / max(cache_stats.get('max_size_mb', 1), 1) * 100,
