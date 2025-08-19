@@ -45,7 +45,7 @@ def main():
     
     try:
         import uvicorn
-        from cv_platform.api.models1.requests import app
+        from src.cv_platform.api.models.requests import app
         from src.cv_platform.utils.logger import setup_logger
         
         # 设置日志

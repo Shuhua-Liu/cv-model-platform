@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-简单API客户端示例
+Simple API Client Example
 
-展示如何使用requests库调用CV Model Platform API
+Shows how to use the requests library to call the CV Model Platform API.
 """
 
 import requests
 import json
 
-# API服务器地址
+# API server address
 API_BASE = "http://localhost:8000"
 
 def demo_detection():
-    """检测演示"""
-    print("🔍 目标检测演示")
+    """Detection Demo"""
+    print("🔍 Object Detection Demo")
     
-    # 上传图像进行检测
+    # Upload images for detection
     with open("test_image.jpg", "rb") as f:
         response = requests.post(
             f"{API_BASE}/detect/yolov8n",
@@ -30,17 +30,17 @@ def demo_detection():
         result = response.json()
         if result["success"]:
             detections = result["data"]["detections"]
-            print(f"✅ 检测到 {len(detections)} 个对象:")
+            print(f"✅ {len(detections)} objects detected:")
             for obj in detections:
                 print(f"   - {obj['class_name']}: {obj['confidence']:.3f}")
         else:
-            print(f"❌ 检测失败: {result['message']}")
+            print(f"❌ Detection failure: {result['message']}")
     else:
-        print(f"❌ HTTP错误: {response.status_code}")
+        print(f"❌ HTTP Errors: {response.status_code}")
 
 def demo_segmentation():
-    """分割演示"""
-    print("\n🎨 图像分割演示")
+    """Segmentation Demo"""
+    print("\n🎨 Image Segmentation Demo")
     
     with open("test_image.jpg", "rb") as f:
         response = requests.post(
@@ -57,18 +57,18 @@ def demo_segmentation():
         result = response.json()
         if result["success"]:
             seg_data = result["data"]["segmentation"]
-            print(f"✅ 生成 {seg_data['num_masks']} 个掩码")
-            print(f"   覆盖率: {seg_data['coverage_ratio']:.2%}")
+            print(f"✅ Generate {seg_data['num_masks']} masks")
+            print(f"   Coverage: {seg_data['coverage_ratio']:.2%}")
             if seg_data.get("result_url"):
-                print(f"   可视化: {API_BASE}{seg_data['result_url']}")
+                print(f"   Visualization: {API_BASE}{seg_data['result_url']}")
         else:
-            print(f"❌ 分割失败: {result['message']}")
+            print(f"❌ Segmentation failed: {result['message']}")
     else:
-        print(f"❌ HTTP错误: {response.status_code}")
+        print(f"❌ HTTP Errors: {response.status_code}")
 
 def demo_model_list():
-    """模型列表演示"""
-    print("\n📋 模型列表演示")
+    """Model List Demo"""
+    print("\n📋 Model List Demo")
     
     response = requests.get(f"{API_BASE}/models")
     
@@ -76,17 +76,17 @@ def demo_model_list():
         result = response.json()
         if result["success"]:
             models = result["data"]
-            print(f"✅ 可用模型 ({len(models)} 个):")
+            print(f"✅ Available models ({len(models)}):")
             for model in models:
                 print(f"   📦 {model['name']}: {model['type']} ({model['framework']})")
         else:
-            print(f"❌ 获取失败: {result['message']}")
+            print(f"❌ Failed to obtain: {result['message']}")
     else:
-        print(f"❌ HTTP错误: {response.status_code}")
+        print(f"❌ HTTP Errors: {response.status_code}")
 
 def demo_health_check():
-    """健康检查演示"""
-    print("\n💓 健康检查演示")
+    """Health Check Demo"""
+    print("\n💓 Health Check Demo")
     
     response = requests.get(f"{API_BASE}/health")
     
@@ -94,42 +94,42 @@ def demo_health_check():
         result = response.json()
         if result["success"]:
             status = result["data"]
-            print("✅ 系统状态正常")
-            print(f"   模型数量: {status['models']['total']}")
-            print(f"   缓存模型: {status['models']['cached']}")
-            print(f"   CPU使用: {status['system']['cpu_percent']:.1f}%")
-            print(f"   内存使用: {status['system']['memory_percent']:.1f}%")
+            print("✅ System status is normal")
+            print(f"   Number of models: {status['models']['total']}")
+            print(f"   Cache Model: {status['models']['cached']}")
+            print(f"   CPU usage: {status['system']['cpu_percent']:.1f}%")
+            print(f"   Memory usage: {status['system']['memory_percent']:.1f}%")
         else:
-            print(f"❌ 健康检查失败: {result['message']}")
+            print(f"❌ Health check failure: {result['message']}")
     else:
-        print(f"❌ HTTP错误: {response.status_code}")
+        print(f"❌ HTTP Errors: {response.status_code}")
 
 def main():
-    """主函数"""
-    print("🚀 CV Model Platform API 简单客户端演示")
+    """Main"""
+    print("🚀 CV Model Platform API Simple Client Demo")
     print("=" * 50)
     
     try:
-        # 健康检查
+        # Health check
         demo_health_check()
         
-        # 模型列表
+        # Model list
         demo_model_list()
         
-        # 检测演示
+        # Detection demo
         demo_detection()
         
-        # 分割演示
+        # Segmentation demo
         demo_segmentation()
         
     except requests.exceptions.ConnectionError:
-        print("❌ 无法连接到API服务器")
-        print("请确保API服务器已启动: python scripts/start_api.py")
+        print("❌ Unable to connect to the API server")
+        print("Please make sure the API server is started: python scripts/start_api.py")
     except Exception as e:
-        print(f"❌ 演示过程中出错: {e}")
+        print(f"❌ Error during presentation: {e}")
     
     print("\n" + "=" * 50)
-    print("🎉 演示完成!")
+    print("🎉 Demonstration completed!")
 
 if __name__ == "__main__":
     main()

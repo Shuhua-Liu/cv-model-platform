@@ -1,5 +1,5 @@
 """
-日志工具 - 统一的日志配置和管理
+Logging Tools - Unified log configuration and management
 """
 
 import sys
@@ -16,19 +16,19 @@ def setup_logger(
     retention: str = "30 days"
 ) -> None:
     """
-    设置日志配置
-    
+    Set up logging configuration
+
     Args:
-        level: 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        log_file: 日志文件路径，None表示只输出到控制台
-        format_type: 格式类型 (text, json)
-        rotation: 日志轮转大小
-        retention: 日志保留时间
+        level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_file: Log file path. None means output only to the console.
+        format_type: Format type (text, json)
+        rotation: Log rotation size
+        retention: Log retention time
     """
-    # 移除默认处理器
+    # Remove the default handler
     logger.remove()
     
-    # 选择格式
+    # Select Format
     if format_type.lower() == "json":
         log_format = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}"
     else:
@@ -39,7 +39,7 @@ def setup_logger(
             "<level>{message}</level>"
         )
     
-    # 添加控制台处理器
+    # Adding a console processor
     logger.add(
         sys.stderr,
         format=log_format,
@@ -49,7 +49,7 @@ def setup_logger(
         diagnose=True
     )
     
-    # 添加文件处理器（如果指定了日志文件）
+    # Add file handler (if log file is specified)
     if log_file:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,11 +65,11 @@ def setup_logger(
             diagnose=True
         )
         
-        logger.info(f"日志文件配置完成: {log_path}")
+        logger.info(f"Log file configuration is complete: {log_path}")
     
-    logger.info(f"日志系统初始化完成 - 级别: {level}")
+    logger.info(f"Logging system initialization complete - Level: {level}")
 
 
 def get_logger(name: str):
-    """获取命名日志器"""
+    """Get a named logger"""
     return logger.bind(name=name)
