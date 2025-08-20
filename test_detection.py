@@ -47,7 +47,7 @@ def test_model_detection(models_root="./cv_models"):
             for i, model in enumerate(models[:5], 1):  # 只显示前5个
                 print(f"  {i}. {model.name}")
                 print(f"     类型: {model.type}, 框架: {model.framework}")
-                print(f"     大小: {model.size_mb:.1f}MB, 置信度: {model.confidence:.2f}")
+                print(f"     大小: {model.file_size_mb:.1f}MB, 置信度: {model.confidence:.2f}")
                 print(f"     路径: {model.path}")
         else:
             print("⚠️  未发现任何模型文件")
