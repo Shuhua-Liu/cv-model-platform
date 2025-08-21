@@ -1,608 +1,653 @@
 #!/usr/bin/env python3
 """
-Model Auto-Discovery Script - 兼容当前ModelDetector版本
+Model Auto-Discovery Script - Enhanced model detection with intelligent grouping
 
-用法:
+This script uses the existing ModelDetector to find available models and provides:
+1. Smart HuggingFace model directory detection
+2. Intelligent model grouping and deduplication
+3. Enhanced filtering and analysis
+4. Configuration file generation
+
+Usage:
     python scripts/models/detect_models.py
-    python scripts/models/detect_models.py --models-root ./cv_models
+    python scripts/models/detect_models.py --models-root ~/cv_models
     python scripts/models/detect_models.py --output config/models.yaml --summary
 """
 
 import argparse
 import sys
+import json
+import time
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Set, Optional, Tuple
+from collections import defaultdict
+from datetime import datetime
 
-# 添加项目根目录到Python路径
+# Add project root to Python path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 try:
-    from src.cv_platform.core.model_detector import ModelDetector, ModelInfo
+    from src.cv_platform.core.model_detector import ModelDetector, ModelInfo, get_model_detector
     from src.cv_platform.core.config_manager import get_config_manager
     from src.cv_platform.utils.logger import setup_logger
     setup_logger("INFO")
     from loguru import logger
+    
+    # Check for PyYAML
+    try:
+        import yaml
+    except ImportError:
+        print("Warning: PyYAML not installed. Configuration file generation may fail.")
+        print("Install with: pip install PyYAML")
+        yaml = None
+        
 except ImportError as e:
-    print(f"❌ 导入错误: {e}")
-    print("请确保此脚本从项目根目录运行，或者cv-model-platform包已正确安装。")
+    print(f"Import error: {e}")
+    print("Please ensure this script is run from the project root directory.")
     sys.exit(1)
 
 
-def apply_filters(models: List[ModelInfo], 
-                 include_patterns: List[str] = None,
-                 exclude_patterns: List[str] = None,
-                 min_size_mb: float = 0.1,
-                 max_size_mb: float = 50000.0) -> List[ModelInfo]:
-    """
-    手动应用过滤器到模型列表
+class IntelligentModelFilter:
+    """Enhanced filtering and grouping for detected models"""
     
-    Args:
-        models: 原始模型列表
-        include_patterns: 包含模式列表
-        exclude_patterns: 排除模式列表
-        min_size_mb: 最小文件大小(MB)
-        max_size_mb: 最大文件大小(MB)
-        
-    Returns:
-        过滤后的模型列表
-    """
-    filtered_models = []
-    
-    for model in models:
-        # 大小过滤
-        if not (min_size_mb <= model.file_size_mb <= max_size_mb):
-            continue
-        
-        # 包含模式过滤
-        if include_patterns:
-            if not any(pattern.lower() in model.name.lower() or 
-                      pattern.lower() in str(model.path).lower() 
-                      for pattern in include_patterns):
-                continue
-        
-        # 排除模式过滤
-        if exclude_patterns:
-            if any(pattern.lower() in model.name.lower() or 
-                  pattern.lower() in str(model.path).lower() 
-                  for pattern in exclude_patterns):
-                continue
-        
-        filtered_models.append(model)
-    
-    return filtered_models
-
-
-def print_summary(models: List[ModelInfo], total_size_mb: float):
-    """打印模型发现摘要"""
-    
-    print(f"\n📊 模型发现摘要")
-    print("=" * 50)
-    print(f"总计发现: {len(models)} 个模型")
-    print(f"总大小: {total_size_mb:.1f} MB ({total_size_mb/1024:.2f} GB)")
-    
-    if not models:
-        return
-    
-    # 按类型统计
-    by_type = {}
-    for model in models:
-        model_type = model.type
-        if model_type not in by_type:
-            by_type[model_type] = {'count': 0, 'size': 0}
-        by_type[model_type]['count'] += 1
-        by_type[model_type]['size'] += model.file_size_mb
-    
-    print(f"\n📁 按类型分布:")
-    for model_type, stats in by_type.items():
-        print(f"  {model_type:<15}: {stats['count']} 个模型, {stats['size']:.1f} MB")
-    
-    # 按框架统计
-    by_framework = {}
-    for model in models:
-        framework = model.framework
-        if framework not in by_framework:
-            by_framework[framework] = 0
-        by_framework[framework] += 1
-    
-    print(f"\n🔧 按框架分布:")
-    for framework, count in by_framework.items():
-        print(f"  {framework:<15}: {count} 个模型")
-    
-    # 大小分布
-    size_ranges = {
-        '< 10MB': [0, 10],
-        '10-100MB': [10, 100], 
-        '100MB-1GB': [100, 1024],
-        '> 1GB': [1024, float('inf')]
+    # HuggingFace model indicators
+    HF_CONFIG_FILES = {
+        'config.json', 'model_index.json', 'pytorch_model.bin.index.json'
     }
     
-    print(f"\n📏 按大小分布:")
-    for range_name, (min_size, max_size) in size_ranges.items():
-        count = len([m for m in models if min_size <= m.file_size_mb < max_size])
-        if count > 0:
-            print(f"  {range_name:<15}: {count} 个模型")
-    
-    # 最大和最小模型
-    if models:
-        largest = max(models, key=lambda m: m.file_size_mb)
-        smallest = min(models, key=lambda m: m.file_size_mb)
-        
-        print(f"\n🏆 模型信息:")
-        print(f"  最大模型: {largest.name} ({largest.file_size_mb:.1f} MB)")
-        print(f"  最小模型: {smallest.name} ({smallest.file_size_mb:.1f} MB)")
-
-
-def print_detailed_results(models: List[ModelInfo]):
-    """打印详细的模型发现结果"""
-    
-    print(f"\n📋 详细模型列表")
-    print("=" * 100)
-    print(f"{'名称':<25} {'类型':<12} {'框架':<15} {'大小':<10} {'置信度':<8} {'路径'}")
-    print("-" * 100)
-    
-    for model in sorted(models, key=lambda m: (m.type, m.name)):
-        size_str = f"{model.file_size_mb:.1f}MB"
-        confidence_str = f"{model.confidence:.2f}"
-        path_str = str(model.path)
-        
-        # 截断过长的路径
-        if len(path_str) > 40:
-            path_str = "..." + path_str[-37:]
-        
-        print(f"{model.name:<25} {model.type:<12} {model.framework:<15} "
-              f"{size_str:<10} {confidence_str:<8} {path_str}")
-
-
-def validate_models(models: List[ModelInfo]) -> Dict[str, List[str]]:
-    """验证发现的模型"""
-    
-    issues = {
-        'warnings': [],
-        'errors': [],
-        'suggestions': []
+    # Known component patterns to group/deduplicate
+    COMPONENT_PATTERNS = {
+        'stable_diffusion': ['unet', 'vae', 'text_encoder', 'tokenizer', 'scheduler'],
+        'clip': ['vision_model', 'text_model'],
+        'blip': ['vision_model', 'text_decoder'],
+        'detectron2': ['model_final', 'config']
     }
     
-    # 检查文件存在性
-    for model in models:
-        if not model.path.exists():
-            issues['errors'].append(f"模型文件不存在: {model.path}")
-    
-    # 检查置信度
-    low_confidence_models = [m for m in models if m.confidence < 0.7]
-    if low_confidence_models:
-        issues['warnings'].append(f"发现 {len(low_confidence_models)} 个低置信度模型")
-        for model in low_confidence_models[:3]:  # 只显示前3个
-            issues['warnings'].append(f"  - {model.name} (置信度: {model.confidence:.2f})")
-    
-    # 检查未知类型
-    unknown_models = [m for m in models if m.type == 'unknown']
-    if unknown_models:
-        issues['warnings'].append(f"发现 {len(unknown_models)} 个未知类型模型")
-        for model in unknown_models[:3]:  # 只显示前3个
-            issues['warnings'].append(f"  - {model.name}")
-    
-    # 检查重复名称
-    names = [m.name for m in models]
-    duplicates = [name for name in set(names) if names.count(name) > 1]
-    if duplicates:
-        issues['warnings'].append(f"发现重复名称: {', '.join(duplicates)}")
-    
-    # 建议
-    if len(models) == 0:
-        issues['suggestions'].append("考虑将模型文件放置在支持的目录结构中")
-        issues['suggestions'].append("支持的文件格式: .pt, .pth, .ckpt, .safetensors, .onnx 等")
-    
-    return issues
-
-
-def interactive_model_selection(models: List[ModelInfo]) -> List[ModelInfo]:
-    """交互式模型选择"""
-    
-    if not models:
-        return models
-    
-    print(f"\n🔍 发现 {len(models)} 个模型，请选择要包含在配置中的模型:")
-    print("(输入模型编号，用空格分隔，或输入 'all' 选择全部，'q' 退出)")
-    
-    for i, model in enumerate(models, 1):
-        status = "✅" if model.confidence > 0.8 else "⚠️" if model.confidence > 0.6 else "❌"
-        print(f"  {i:2d}. {status} {model.name:<25} ({model.type}, {model.file_size_mb:.1f}MB)")
-    
-    while True:
-        try:
-            selection = input("\n请选择: ").strip()
-            
-            if selection.lower() == 'q':
-                print("❌ 用户取消操作")
-                return []
-            
-            if selection.lower() == 'all':
-                print(f"✅ 已选择全部 {len(models)} 个模型")
-                return models
-            
-            if not selection:
-                print("✅ 未选择任何模型")
-                return []
-            
-            indices = [int(x) for x in selection.split()]
-            selected_models = [models[i-1] for i in indices if 1 <= i <= len(models)]
-            
-            print(f"✅ 已选择 {len(selected_models)} 个模型")
-            return selected_models
-            
-        except (ValueError, IndexError):
-            print("❌ 无效输入，请输入有效的模型编号")
-
-
-def test_generated_config(config_path: Path) -> bool:
-    """
-    测试生成的配置文件是否有效
-    
-    Args:
-        config_path: 配置文件路径
+    def __init__(self, models_root: Path):
+        """Initialize the intelligent filter"""
+        self.models_root = Path(models_root)
+        self.processed_paths: Set[Path] = set()
         
-    Returns:
-        测试是否通过
-    """
-    try:
-        import yaml
+    def filter_models(self, raw_models: List[ModelInfo]) -> List[ModelInfo]:
+        """
+        Apply intelligent filtering to remove redundant models
         
-        # 读取配置文件
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        
-        print(f"  📄 配置文件格式: ✅ 有效YAML")
-        
-        # 检查基本结构
-        if 'models_root' not in config:
-            print(f"  ❌ 缺少 models_root 字段")
-            return False
-        
-        if 'models' not in config:
-            print(f"  ❌ 缺少 models 字段")
-            return False
-        
-        print(f"  📋 配置结构: ✅ 完整")
-        
-        # 检查每个模型配置
-        models_root = Path(config['models_root'])
-        valid_models = 0
-        total_models = len(config['models'])
-        
-        for model_name, model_config in config['models'].items():
-            # 检查必需字段
-            required_fields = ['type', 'path', 'framework', 'device']
-            missing_fields = [field for field in required_fields if field not in model_config]
+        Args:
+            raw_models: Raw list of detected models
             
-            if missing_fields:
-                print(f"  ⚠️ 模型 {model_name} 缺少字段: {missing_fields}")
-                continue
+        Returns:
+            Filtered list with duplicates and components removed
+        """
+        logger.info(f"Filtering {len(raw_models)} raw models...")
+        
+        # Step 1: Group models by directory to detect HuggingFace structures
+        models_by_dir = self._group_models_by_directory(raw_models)
+        
+        # Step 2: Identify HuggingFace model directories
+        hf_models = self._identify_huggingface_models(models_by_dir)
+        
+        # Step 3: Filter out component files from HuggingFace models
+        filtered_models = self._filter_component_files(raw_models, hf_models)
+        
+        # Step 4: Remove low-confidence duplicates
+        final_models = self._remove_duplicates(filtered_models)
+        
+        logger.info(f"Filtered to {len(final_models)} unique models")
+        return final_models
+    
+    def _group_models_by_directory(self, models: List[ModelInfo]) -> Dict[Path, List[ModelInfo]]:
+        """Group models by their parent directory"""
+        models_by_dir = defaultdict(list)
+        
+        for model in models:
+            parent_dir = model.path.parent
+            models_by_dir[parent_dir].append(model)
+        
+        return dict(models_by_dir)
+    
+    def _identify_huggingface_models(self, models_by_dir: Dict[Path, List[ModelInfo]]) -> Set[Path]:
+        """Identify directories that contain HuggingFace models"""
+        hf_directories = set()
+        
+        for directory, models in models_by_dir.items():
+            # Check for HuggingFace config files
+            has_config = any(
+                (directory / config_file).exists() 
+                for config_file in self.HF_CONFIG_FILES
+            )
             
-            # 检查文件路径
-            model_path = model_config['path']
-            if '{models_root}' in model_path:
-                actual_path = Path(model_path.replace('{models_root}', str(models_root)))
+            # Check for multiple component-like files
+            component_count = len([
+                model for model in models 
+                if any(component in model.name.lower() 
+                      for patterns in self.COMPONENT_PATTERNS.values() 
+                      for component in patterns)
+            ])
+            
+            # Check for typical HuggingFace structure
+            has_model_files = len(models) > 1
+            has_pytorch_bin = any('pytorch_model' in model.name for model in models)
+            has_safetensors = any('model.safetensors' in model.name for model in models)
+            
+            if (has_config or 
+                (component_count >= 2) or 
+                (has_model_files and (has_pytorch_bin or has_safetensors))):
+                
+                hf_directories.add(directory)
+                logger.debug(f"Identified HuggingFace model directory: {directory}")
+        
+        return hf_directories
+    
+    def _filter_component_files(self, models: List[ModelInfo], hf_directories: Set[Path]) -> List[ModelInfo]:
+        """Filter out individual component files from HuggingFace models"""
+        filtered_models = []
+        
+        for model in models:
+            model_dir = model.path.parent
+            
+            # If this is inside a HuggingFace directory, create a representative model
+            if model_dir in hf_directories:
+                # Check if we already processed this directory
+                if model_dir not in self.processed_paths:
+                    # Create a directory-level model entry
+                    dir_model = self._create_directory_model(model_dir, models)
+                    if dir_model:
+                        filtered_models.append(dir_model)
+                    self.processed_paths.add(model_dir)
             else:
-                actual_path = Path(model_path)
-            
-            if actual_path.exists():
-                valid_models += 1
-            else:
-                print(f"  ⚠️ 模型文件不存在: {actual_path}")
+                # Regular single-file model
+                filtered_models.append(model)
         
-        print(f"  📁 文件检查: {valid_models}/{total_models} 个模型文件存在")
-        
-        # 尝试加载配置到ConfigManager
-        try:
-            from src.cv_platform.core.config_manager import ConfigManager
-            temp_config_manager = ConfigManager()
-            print(f"  🔧 ConfigManager: ✅ 可以加载")
-        except Exception as e:
-            print(f"  🔧 ConfigManager: ⚠️ 加载失败 - {e}")
-        
-        return valid_models > 0
-        
-    except Exception as e:
-        print(f"  ❌ 配置文件测试失败: {e}")
-        return False
-
-
-def generate_model_config(models: List[ModelInfo], models_root: Path) -> Dict[str, Any]:
-    """
-    手动生成模型配置
+        return filtered_models
     
-    Args:
-        models: 模型列表
-        models_root: 模型根目录
+    def _create_directory_model(self, directory: Path, all_models: List[ModelInfo]) -> Optional[ModelInfo]:
+        """Create a representative model for a HuggingFace directory"""
+        # Get all models in this directory
+        dir_models = [m for m in all_models if m.path.parent == directory]
         
-    Returns:
-        配置字典
-    """
-    config = {
-        'models_root': str(models_root),
-        'models': {},
-        'metadata': {
-            'generated_by': 'detect_models.py',
-            'generated_at': __import__('time').time(),
-            'total_models': len(models),
-            'source_directory': str(models_root)
+        if not dir_models:
+            return None
+        
+        # Use the first model as a template and modify it
+        template_model = dir_models[0]
+        
+        # Calculate total directory size
+        total_size = sum(m.file_size_mb for m in dir_models)
+        
+        # Determine model characteristics from directory name and config
+        model_type, framework, architecture = self._analyze_directory_model(directory)
+        
+        # Create enhanced metadata
+        metadata = {
+            'is_huggingface_directory': True,
+            'component_files': [m.name for m in dir_models],
+            'component_count': len(dir_models),
+            'directory_path': str(directory),
+            'config_files': [
+                str(f) for f in directory.glob('*.json') 
+                if f.name in self.HF_CONFIG_FILES
+            ]
         }
+        
+        # Try to read config for additional info
+        config_path = directory / 'config.json'
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config_data = json.load(f)
+                    metadata['hf_config'] = config_data
+                    
+                    # Extract additional info from config
+                    if '_class_name' in config_data:
+                        metadata['model_class'] = config_data['_class_name']
+                    if 'architectures' in config_data:
+                        metadata['architectures'] = config_data['architectures']
+                        
+            except Exception as e:
+                logger.debug(f"Could not read config from {config_path}: {e}")
+        
+        # Create the directory model
+        return ModelInfo(
+            name=directory.name,
+            path=directory,  # Point to directory instead of file
+            type=model_type,
+            framework=framework,
+            architecture=architecture,
+            confidence=0.95,  # High confidence for HuggingFace models
+            file_size_mb=total_size,
+            last_modified=max(m.last_modified for m in dir_models),
+            metadata=metadata
+        )
+    
+    def _analyze_directory_model(self, directory: Path) -> Tuple[str, str, str]:
+        """Analyze directory to determine model characteristics"""
+        dir_name = directory.name.lower()
+        
+        # Check for known patterns
+        if any(pattern in dir_name for pattern in ['stable-diffusion', 'sd-', 'sdxl']):
+            return 'generation', 'diffusers', 'stable_diffusion'
+        elif 'clip' in dir_name:
+            return 'multimodal', 'transformers', 'clip'
+        elif 'blip' in dir_name:
+            return 'multimodal', 'transformers', 'blip'
+        elif any(pattern in dir_name for pattern in ['llava', 'multimodal']):
+            return 'multimodal', 'transformers', 'multimodal'
+        elif any(pattern in dir_name for pattern in ['bert', 'roberta', 'gpt']):
+            return 'text', 'transformers', 'language_model'
+        
+        # Check parent directory structure for hints
+        parent_parts = [p.lower() for p in directory.parts]
+        if 'generation' in parent_parts:
+            return 'generation', 'huggingface', 'unknown'
+        elif 'multimodal' in parent_parts:
+            return 'multimodal', 'huggingface', 'unknown'
+        elif 'classification' in parent_parts:
+            return 'classification', 'huggingface', 'unknown'
+        
+        return 'unknown', 'huggingface', 'unknown'
+    
+    def _remove_duplicates(self, models: List[ModelInfo]) -> List[ModelInfo]:
+        """Remove duplicate models based on name and characteristics"""
+        seen_models = {}
+        unique_models = []
+        
+        for model in models:
+            # Create a key based on name and characteristics
+            key = (model.name.lower(), model.type, model.framework)
+            
+            if key not in seen_models:
+                seen_models[key] = model
+                unique_models.append(model)
+            else:
+                # Keep the one with higher confidence
+                existing = seen_models[key]
+                if model.confidence > existing.confidence:
+                    # Replace in both dict and list
+                    seen_models[key] = model
+                    unique_models[unique_models.index(existing)] = model
+        
+        return unique_models
+
+
+def generate_models_config(models: List[ModelInfo], output_path: Path) -> Dict[str, Any]:
+    """
+    Generate YAML configuration from detected models
+    
+    Args:
+        models: List of detected models
+        output_path: Path to save the configuration file
+    
+    Returns:
+        Generated configuration dictionary
+    """
+    if not yaml:
+        raise ImportError("PyYAML is required for configuration generation")
+    
+    config = {
+        'metadata': {
+            'generated_at': datetime.now().isoformat(),
+            'total_models': len(models),
+            'detection_method': 'enhanced_detector',
+            'version': '2.0',
+            'generator': 'cv_platform_detect_models'
+        },
+        'models': {}
     }
     
+    # Group models by type for statistics
+    models_by_type = defaultdict(list)
     for model in models:
-        # 生成相对路径
-        try:
-            relative_path = model.path.relative_to(models_root)
-            model_path = "{models_root}/" + str(relative_path).replace('\\', '/')
-        except ValueError:
-            # 如果无法生成相对路径，使用绝对路径
-            model_path = str(model.path)
+        models_by_type[model.type].append(model)
+    
+    # Generate configuration for each model
+    for model in models:
+        # Create a clean model name for config key
+        config_name = model.name
         
-        # 基础配置
+        # Remove file extensions for cleaner names
+        if config_name.endswith(('.pt', '.pth', '.safetensors', '.ckpt', '.onnx', '.bin')):
+            config_name = Path(config_name).stem
+        
+        # Ensure unique config names
+        base_name = config_name
+        counter = 1
+        while config_name in config['models']:
+            config_name = f"{base_name}_{counter}"
+            counter += 1
+        
+        # Build model configuration
         model_config = {
+            'path': str(model.path),
             'type': model.type,
-            'path': model_path,
             'framework': model.framework,
             'architecture': model.architecture,
-            'device': 'auto'
+            'device': 'auto',  # Let the system decide
+            'enabled': True,
+            'metadata': {
+                'size_mb': round(model.file_size_mb, 2),
+                'confidence': round(model.confidence, 2),
+                'last_modified': model.last_modified,
+                'is_huggingface': model.metadata.get('is_huggingface_directory', False)
+            }
         }
         
-        # 添加类型特定的配置
+        # Add type-specific configurations
         if model.type == 'detection':
             model_config.update({
-                'batch_size': 4,
-                'confidence': 0.25,
+                'confidence_threshold': 0.25,
                 'nms_threshold': 0.45,
-                'max_det': 300
+                'batch_size': 1,
+                'input_size': [640, 640]
             })
         elif model.type == 'segmentation':
+            if 'sam' in model.architecture.lower():
+                model_config.update({
+                    'points_per_side': 32,
+                    'pred_iou_thresh': 0.88,
+                    'stability_score_thresh': 0.95,
+                    'batch_size': 1
+                })
+            else:
+                model_config.update({
+                    'batch_size': 1,
+                    'input_size': [512, 512]
+                })
+        elif model.type == 'generation':
             model_config.update({
-                'batch_size': 1,
-                'points_per_side': 32,
-                'pred_iou_thresh': 0.88,
-                'stability_score_thresh': 0.95
+                'num_inference_steps': 20,
+                'guidance_scale': 7.5,
+                'enable_memory_efficient_attention': True,
+                'batch_size': 1
             })
         elif model.type == 'classification':
             model_config.update({
-                'batch_size': 8,
                 'top_k': 5,
-                'pretrained': True
+                'batch_size': 4,
+                'input_size': [224, 224]
             })
         elif model.type == 'multimodal':
             model_config.update({
-                'batch_size': 8,
-                'max_text_length': 77,
-                'temperature': 0.07
-            })
-        elif model.type == 'generation':
-            model_config.update({
                 'batch_size': 1,
-                'num_inference_steps': 20,
-                'guidance_scale': 7.5,
-                'enable_memory_efficient_attention': True
+                'max_text_length': 77
             })
         
-        # 添加元数据
-        if hasattr(model, 'metadata') and model.metadata:
-            model_config['metadata'] = model.metadata
+        # Add HuggingFace specific metadata
+        if model.metadata.get('is_huggingface_directory'):
+            model_config['metadata'].update({
+                'component_files': model.metadata.get('component_files', []),
+                'component_count': model.metadata.get('component_count', 0)
+            })
+            
+            # Add config info if available
+            if 'hf_config' in model.metadata:
+                hf_config = model.metadata['hf_config']
+                if 'model_type' in hf_config:
+                    model_config['metadata']['model_type'] = hf_config['model_type']
+                if '_class_name' in hf_config:
+                    model_config['metadata']['model_class'] = hf_config['_class_name']
         
-        config['models'][model.name] = model_config
+        # Add file-specific metadata
+        model_config['metadata'].update({
+            'file_extension': model.path.suffix if model.path.is_file() else 'directory',
+            'relative_path': str(model.path.relative_to(model.path.parent.parent)) if len(model.path.parts) > 1 else str(model.path)
+        })
+        
+        config['models'][config_name] = model_config
+    
+    # Add summary statistics
+    config['summary'] = {
+        'by_type': {model_type: len(type_models) for model_type, type_models in models_by_type.items()},
+        'by_framework': {},
+        'total_size_mb': round(sum(m.file_size_mb for m in models), 2),
+        'average_size_mb': round(sum(m.file_size_mb for m in models) / len(models), 2) if models else 0,
+        'high_confidence_models': len([m for m in models if m.confidence >= 0.9]),
+        'huggingface_models': len([m for m in models if m.metadata.get('is_huggingface_directory', False)])
+    }
+    
+    # Framework statistics
+    framework_counts = defaultdict(int)
+    for model in models:
+        framework_counts[model.framework] += 1
+    config['summary']['by_framework'] = dict(framework_counts)
+    
+    # Save to file
+    try:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, indent=2)
+        logger.info(f"Configuration saved to: {output_path}")
+    except Exception as e:
+        logger.error(f"Failed to save configuration: {e}")
+        raise
     
     return config
 
 
-def save_config_to_file(config: Dict[str, Any], output_path: Path):
-    """
-    保存配置到YAML文件
+def print_summary(models: List[ModelInfo], total_size_mb: float) -> None:
+    """Print summary of detected models"""
+    print(f"\n📊 Enhanced Model Detection Summary")
+    print("=" * 60)
+    print(f"Total models found: {len(models)}")
+    print(f"Total size: {total_size_mb:.1f} MB")
+    print(f"Average size: {total_size_mb/len(models):.1f} MB per model" if models else "N/A")
     
-    Args:
-        config: 配置字典
-        output_path: 输出文件路径
-    """
-    import yaml
+    # Count high-confidence models
+    high_conf_models = [m for m in models if m.confidence >= 0.9]
+    print(f"High confidence models (≥90%): {len(high_conf_models)}")
     
-    try:
-        with open(output_path, 'w', encoding='utf-8') as f:
-            yaml.dump(config, f, default_flow_style=False, indent=2, allow_unicode=True)
-        return True
-    except Exception as e:
-        print(f"❌ 保存配置文件失败: {e}")
-        return False
+    # Count HuggingFace models
+    hf_models = [m for m in models if m.metadata.get('is_huggingface_directory', False)]
+    print(f"HuggingFace directory models: {len(hf_models)}")
+    
+    # Group by type
+    by_type = defaultdict(list)
+    for model in models:
+        by_type[model.type].append(model)
+    
+    print(f"\nModels by type:")
+    for model_type, type_models in sorted(by_type.items()):
+        type_size = sum(m.file_size_mb for m in type_models)
+        avg_conf = sum(m.confidence for m in type_models) / len(type_models)
+        print(f"  📁 {model_type:12s}: {len(type_models):2d} models ({type_size:6.1f} MB, avg conf: {avg_conf:.2f})")
+        
+        # Show breakdown by framework
+        by_framework = defaultdict(int)
+        for model in type_models:
+            by_framework[model.framework] += 1
+        
+        for framework, count in sorted(by_framework.items()):
+            print(f"      └─ {framework:10s}: {count:2d} models")
+    
+    # Group by framework
+    by_framework = defaultdict(int)
+    for model in models:
+        by_framework[model.framework] += 1
+    
+    print(f"\nModels by framework:")
+    for framework, count in sorted(by_framework.items()):
+        print(f"  🔧 {framework:12s}: {count:2d} models")
+
+
+def print_detailed_results(models: List[ModelInfo]) -> None:
+    """Print detailed information about detected models"""
+    print(f"\n📋 Detailed Model Information")
+    print("=" * 80)
+    
+    for i, model in enumerate(models, 1):
+        # Confidence icon
+        if model.confidence >= 0.9:
+            confidence_icon = "🟢"
+        elif model.confidence >= 0.7:
+            confidence_icon = "🟡"
+        else:
+            confidence_icon = "🔴"
+        
+        # HuggingFace icon
+        hf_icon = "🤗" if model.metadata.get('is_huggingface_directory', False) else ""
+        
+        print(f"\n{i:2d}. {confidence_icon} {hf_icon} {model.name}")
+        print(f"    Type: {model.type:12s} | Framework: {model.framework:12s} | Architecture: {model.architecture}")
+        print(f"    Path: {model.path}")
+        print(f"    Size: {model.file_size_mb:8.1f} MB | Confidence: {model.confidence:.2f}")
+        
+        # Show HuggingFace specific info
+        if model.metadata.get('is_huggingface_directory'):
+            component_count = model.metadata.get('component_count', 0)
+            print(f"    🤗 HuggingFace directory with {component_count} component files")
+            
+            # Show some component files
+            components = model.metadata.get('component_files', [])
+            if components:
+                shown_components = components[:3]
+                if len(components) > 3:
+                    shown_components.append(f"... +{len(components)-3} more")
+                print(f"    Components: {', '.join(shown_components)}")
+        
+        # Show additional metadata
+        metadata_items = []
+        if model.metadata.get('model_class'):
+            metadata_items.append(f"class: {model.metadata['model_class']}")
+        if model.metadata.get('file_extension'):
+            metadata_items.append(f"format: {model.metadata['file_extension']}")
+        
+        if metadata_items:
+            print(f"    Metadata: {' | '.join(metadata_items)}")
 
 
 def main():
+    """Main function with enhanced argument parsing"""
     parser = argparse.ArgumentParser(
-        description='扫描并生成模型配置文件',
+        description='Enhanced CV model detection with intelligent filtering',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
-  %(prog)s                                    # 使用默认设置扫描
-  %(prog)s --models-root ./cv_models          # 指定模型目录
-  %(prog)s --include yolo sam                 # 只包含YOLO和SAM模型
-  %(prog)s --exclude test debug               # 排除包含test或debug的模型
-  %(prog)s --min-size 10 --max-size 1000     # 只包含10MB-1GB的模型
-  %(prog)s --output config/my_models.yaml    # 指定输出文件
-  %(prog)s --interactive                     # 交互式选择模型
+Examples:
+  python scripts/models/detect_models.py
+  python scripts/models/detect_models.py --models-root ~/cv_models --summary
+  python scripts/models/detect_models.py --detailed --min-confidence 0.8
+  python scripts/models/detect_models.py --filter-components --output my_models.yaml
         """
     )
     
-    parser.add_argument('--models-root', '-r',
+    parser.add_argument('--models-root', 
                       type=str,
-                      help='模型根目录路径')
+                      default=None,
+                      help='Model root directory path (default: from config)')
     
     parser.add_argument('--output', '-o',
                       type=str,
-                      help='输出配置文件路径 (默认: config/models.yaml)')
+                      default=None,
+                      help='Output configuration file path (default: config/models.yaml)')
     
-    parser.add_argument('--include',
-                      nargs='+',
-                      help='包含模式 (只包含匹配的模型)')
+    parser.add_argument('--summary', '-s',
+                      action='store_true',
+                      help='Show detection summary only')
     
-    parser.add_argument('--exclude',
-                      nargs='+', 
-                      help='排除模式 (排除匹配的模型)')
+    parser.add_argument('--detailed', '-d',
+                      action='store_true', 
+                      help='Show detailed model information')
     
-    parser.add_argument('--min-size',
+    parser.add_argument('--min-confidence',
                       type=float,
-                      default=0.1,
-                      help='最小文件大小 (MB) (默认: 0.1)')
+                      default=0.5,
+                      help='Minimum confidence threshold (default: 0.5)')
     
-    parser.add_argument('--max-size',
-                      type=float,
-                      default=50000.0,
-                      help='最大文件大小 (MB) (默认: 50000)')
-    
-    parser.add_argument('--summary',
+    parser.add_argument('--filter-components',
                       action='store_true',
-                      help='显示摘要统计信息')
-    
-    parser.add_argument('--detailed',
-                      action='store_true',
-                      help='显示详细模型列表')
-    
-    parser.add_argument('--interactive', '-i',
-                      action='store_true',
-                      help='交互式选择要包含的模型')
-    
-    parser.add_argument('--validate',
-                      action='store_true',
-                      help='验证发现的模型')
+                      help='Apply intelligent component filtering for HuggingFace models')
     
     parser.add_argument('--force-rescan',
                       action='store_true',
-                      help='强制重新扫描(忽略缓存)')
+                      help='Force rescan (ignore cache)')
     
-    parser.add_argument('--test-config',
-                      action='store_true',
-                      help='测试生成的配置文件是否有效')
+    parser.add_argument('--export-format',
+                      choices=['yaml', 'json', 'csv'],
+                      default='yaml',
+                      help='Export format for results')
     
     parser.add_argument('--verbose', '-v',
                       action='store_true',
-                      help='详细输出')
+                      help='Verbose output')
     
     args = parser.parse_args()
     
-    # 设置日志级别
+    # Set log level
     if args.verbose:
         logger.remove()
         logger.add(sys.stderr, level="DEBUG")
     
     try:
-        # 确定模型根目录
+        # Determine models root directory
         if args.models_root:
             models_root = Path(args.models_root)
         else:
-            try:
-                config_manager = get_config_manager()
-                models_root = config_manager.get_models_root()
-            except Exception as e:
-                logger.warning(f"无法获取配置管理器: {e}")
-                models_root = Path("./cv_models")
+            config_manager = get_config_manager()
+            models_root = config_manager.get_models_root()
         
         if not models_root.exists():
-            print(f"❌ 模型根目录不存在: {models_root}")
-            print("请检查路径或使用 --models-root 参数指定正确的路径")
-            print("\n💡 提示:")
-            print(f"   1. 创建目录: mkdir -p {models_root}")
-            print(f"   2. 或指定现有目录: --models-root /path/to/your/models")
+            print(f"❌ Models root directory does not exist: {models_root}")
+            print("Please check the path or use --models-root to specify the correct path")
             return 1
         
-        print(f"🔍 扫描模型目录: {models_root}")
+        print(f"🔍 Scanning models directory: {models_root}")
         
-        # 创建检测器
-        detector = ModelDetector(models_root)
+        # Create model detector
+        detector = get_model_detector(models_root)
         
-        # 执行模型发现 - 使用当前API
-        models = detector.detect_models(force_rescan=args.force_rescan)
+        # Perform model detection
+        start_time = time.time()
+        raw_models = detector.detect_models(force_rescan=args.force_rescan)
+        detection_time = time.time() - start_time
         
-        if not models:
-            print("⚠️  未发现任何模型文件")
-            print("\n💡 建议检查:")
-            print("   1. 模型文件是否存在于指定目录")
-            print("   2. 文件格式是否支持 (.pt, .pth, .safetensors, .onnx等)")
-            print("   3. 文件大小是否合理")
-            
-            # 显示目录内容
-            try:
-                files = list(models_root.rglob("*"))
-                if files:
-                    print(f"\n📁 目录 {models_root} 包含 {len(files)} 个文件:")
-                    for file in files[:10]:  # 只显示前10个
-                        if file.is_file():
-                            size_mb = file.stat().st_size / (1024*1024)
-                            print(f"   📄 {file.name} ({size_mb:.1f}MB)")
-                    if len(files) > 10:
-                        print(f"   ... 还有 {len(files)-10} 个文件")
-                else:
-                    print(f"\n📁 目录 {models_root} 为空")
-            except Exception as e:
-                print(f"   无法列出目录内容: {e}")
-            
+        if not raw_models:
+            print("⚠️  No models found")
+            print("\n💡 Suggestions:")
+            print("   1. Check if model files exist in the specified directory")
+            print("   2. Ensure file formats are supported (.pt, .pth, .safetensors, .onnx, etc.)")
+            print("   3. Check minimum confidence threshold")
+            print("   4. For HuggingFace models, ensure they contain proper structure")
             return 0
         
-        print(f"✅ 原始扫描发现 {len(models)} 个模型")
+        print(f"📊 Raw detection completed in {detection_time:.2f}s - found {len(raw_models)} files")
         
-        # 应用过滤器
-        filtered_models = apply_filters(
-            models,
-            include_patterns=args.include,
-            exclude_patterns=args.exclude,
-            min_size_mb=args.min_size,
-            max_size_mb=args.max_size
-        )
+        # Apply intelligent filtering if requested
+        if args.filter_components:
+            print("🧠 Applying intelligent component filtering...")
+            filter_start = time.time()
+            
+            intelligent_filter = IntelligentModelFilter(models_root)
+            filtered_models = intelligent_filter.filter_models(raw_models)
+            
+            filter_time = time.time() - filter_start
+            print(f"✨ Filtering completed in {filter_time:.2f}s - {len(filtered_models)} unique models")
+            
+            models = filtered_models
+        else:
+            models = raw_models
         
-        if len(filtered_models) != len(models):
-            print(f"🔽 过滤后剩余 {len(filtered_models)} 个模型")
-        
-        models = filtered_models
+        # Apply confidence filtering
+        if args.min_confidence > 0:
+            before_count = len(models)
+            models = [m for m in models if m.confidence >= args.min_confidence]
+            if len(models) < before_count:
+                print(f"🎯 Confidence filtering: {before_count} → {len(models)} models (≥{args.min_confidence:.1f})")
         
         if not models:
-            print("❌ 过滤后没有模型剩余")
-            print("💡 尝试调整过滤条件")
+            print("⚠️  No models meet the specified criteria")
             return 0
         
-        # 验证模型
-        if args.validate:
-            print(f"\n🔍 验证发现的模型...")
-            issues = validate_models(models)
-            
-            if issues['errors']:
-                print(f"❌ 错误:")
-                for error in issues['errors']:
-                    print(f"  - {error}")
-            
-            if issues['warnings']:
-                print(f"⚠️ 警告:")
-                for warning in issues['warnings']:
-                    print(f"  - {warning}")
-            
-            if issues['suggestions']:
-                print(f"💡 建议:")
-                for suggestion in issues['suggestions']:
-                    print(f"  - {suggestion}")
-        
-        # 交互式选择
-        if args.interactive:
-            models = interactive_model_selection(models)
-            if not models:
-                print("❌ 未选择任何模型")
-                return 0
-        
-        # 计算总大小
+        # Calculate total size
         total_size_mb = sum(model.file_size_mb for model in models)
         
-        # 显示结果
+        # Display results
         if args.summary or not args.detailed:
             print_summary(models, total_size_mb)
         
         if args.detailed:
             print_detailed_results(models)
         
-        # 生成配置文件
+        # Generate configuration file
         output_file = args.output
         if output_file is None:
-            # 默认输出路径
             config_dir = Path("config")
             config_dir.mkdir(exist_ok=True)
             output_file = config_dir / "models.yaml"
@@ -610,55 +655,54 @@ def main():
         output_path = Path(output_file)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # 生成并保存配置
+        # Generate configuration
         try:
-            print(f"\n📝 生成配置文件...")
-            config = generate_model_config(models, models_root)
-            
-            if save_config_to_file(config, output_path):
-                print(f"✅ 模型配置已生成: {output_path}")
-                print(f"📄 包含 {len(config.get('models', {}))} 个模型配置")
-                
-                # 显示生成的配置摘要
-                print(f"\n📋 配置摘要:")
-                print(f"  模型根目录: {config['models_root']}")
-                print(f"  配置的模型:")
-                for model_name, model_config in config['models'].items():
-                    print(f"    - {model_name:<20} ({model_config['type']}, {model_config['framework']})")
-                
-                # 显示推荐的下一步操作
-                print(f"\n🚀 下一步操作:")
-                print(f"   1. 检查生成的配置文件:")
-                print(f"      cat {output_path}")
-                print(f"   2. 启动API服务器:")
-                print(f"      python src/cv_platform/api/main.py")
-                print(f"   3. 测试模型列表:")
-                print(f"      curl http://localhost:8000/api/v1/models")
-                print(f"   4. 检查系统健康:")
-                print(f"      curl http://localhost:8000/api/v1/health")
-                
-                # 测试配置文件
-                if args.test_config:
-                    print(f"\n🧪 测试配置文件...")
-                    if test_generated_config(output_path):
-                        print("✅ 配置文件测试通过")
-                    else:
-                        print("⚠️ 配置文件测试发现问题")
-                
+            if args.export_format == 'yaml':
+                config = generate_models_config(models, output_path)
+                print(f"\n✅ Model configuration generated: {output_path}")
+                print(f"📄 Contains {len(config['models'])} model configurations")
             else:
-                return 1
+                # Use ModelDetector's export functionality
+                export_data = detector.export_detection_results(args.export_format)
+                
+                if args.export_format == 'json':
+                    output_path = output_path.with_suffix('.json')
+                    with open(output_path, 'w') as f:
+                        f.write(export_data)
+                elif args.export_format == 'csv':
+                    output_path = output_path.with_suffix('.csv')
+                    with open(output_path, 'w') as f:
+                        f.write(export_data)
+                
+                print(f"\n✅ Results exported to: {output_path}")
                 
         except Exception as e:
-            print(f"❌ 生成配置文件失败: {e}")
+            logger.error(f"Could not generate output file: {e}")
             if args.verbose:
                 import traceback
                 traceback.print_exc()
-            return 1
+        
+        # Show recommended next steps
+        print(f"\n🚀 Next Steps:")
+        print(f"   1. Review the generated file: {output_path}")
+        print(f"   2. Adjust model parameters as needed")
+        print(f"   3. Test model loading:")
+        print(f"      python examples/basic_usage/detection_demo.py")
+        print(f"   4. Start the API server:")
+        print(f"      python scripts/start_api.py")
+        
+        # Show detection summary from ModelDetector
+        if args.verbose:
+            detection_summary = detector.get_detection_summary()
+            print(f"\n🔧 Detection Summary:")
+            print(f"   Total scan time: {detection_time:.2f}s")
+            print(f"   Models root: {detection_summary['models_root']}")
+            print(f"   Last scan: {time.ctime(detection_summary['last_scan_time'])}")
         
         return 0
         
     except Exception as e:
-        logger.error(f"模型发现失败: {e}")
+        logger.error(f"Model detection failed: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
