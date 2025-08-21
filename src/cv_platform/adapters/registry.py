@@ -13,18 +13,18 @@ from .base import BaseModelAdapter
 
 
 class AdapterRegistry:
-    """Adapter Registry"""
+    """适配器注册中心"""
     
     def __init__(self):
-        """Initialize the registry"""
+        """初始化注册中心"""
         self._adapters: Dict[str, Type[BaseModelAdapter]] = {}
         self._framework_mappings: Dict[str, str] = {}
         self._architecture_mappings: Dict[str, str] = {}
         
-        # Automatically register built-in adapters
+        # 自动注册内置适配器
         self._register_builtin_adapters()
         
-        logger.info("Adapter registration center initialization completed")
+        logger.info("适配器注册中心初始化完成")
     
     def register(self, 
                  name: str, 
@@ -32,44 +32,44 @@ class AdapterRegistry:
                  frameworks: Optional[List[str]] = None,
                  architectures: Optional[List[str]] = None) -> None:
         """
-        Register an adapter
-
+        注册适配器
+        
         Args:
-            name: Adapter name
-            adapter_class: Adapter class
-            frameworks: List of supported frameworks
-            architectures: List of supported architectures
+            name: 适配器名称
+            adapter_class: 适配器类
+            frameworks: 支持的框架列表
+            architectures: 支持的架构列表
         """
         if not issubclass(adapter_class, BaseModelAdapter):
-            raise ValueError(f"The adapter class must inherit BaseModelAdapter: {adapter_class}")
+            raise ValueError(f"适配器类必须继承BaseModelAdapter: {adapter_class}")
         
         self._adapters[name] = adapter_class
         
-        # Registering Framework Mappings
+        # 注册框架映射
         if frameworks:
             for framework in frameworks:
                 self._framework_mappings[framework] = name
         
-        # Registering Schema Mappings
+        # 注册架构映射
         if architectures:
             for arch in architectures:
                 self._architecture_mappings[arch] = name
         
-        logger.info(f"Registered adapters: {name} -> {adapter_class.__name__}")
+        logger.info(f"已注册适配器: {name} -> {adapter_class.__name__}")
     
     def get_adapter_class(self, name: str) -> Optional[Type[BaseModelAdapter]]:
-        """Get the adapter class by name"""
+        """根据名称获取适配器类"""
         return self._adapters.get(name)
     
     def get_adapter_by_framework(self, framework: str) -> Optional[Type[BaseModelAdapter]]:
-        """Get the adapter class according to the framework"""
+        """根据框架获取适配器类"""
         adapter_name = self._framework_mappings.get(framework)
         if adapter_name:
             return self._adapters.get(adapter_name)
         return None
     
     def get_adapter_by_architecture(self, architecture: str) -> Optional[Type[BaseModelAdapter]]:
-        """Get the adapter class based on the architecture"""
+        """根据架构获取适配器类"""
         adapter_name = self._architecture_mappings.get(architecture)
         if adapter_name:
             return self._adapters.get(adapter_name)
@@ -82,62 +82,62 @@ class AdapterRegistry:
                       architecture: Optional[str] = None,
                       **kwargs) -> BaseModelAdapter:
         """
-        Create an adapter instance
-
+        创建适配器实例
+        
         Args:
-            model_path: Model file path
-            adapter_name: Adapter name
-            framework: Model framework
-            architecture: Model architecture
-            **kwargs: Parameters passed to the adapter
-
+            model_path: 模型文件路径
+            adapter_name: 指定适配器名称
+            framework: 模型框架
+            architecture: 模型架构
+            **kwargs: 传递给适配器的参数
+            
         Returns:
-            Adapter instance
+            适配器实例
         """
         adapter_class = None
         
-        # 1. Give priority to the specified adapter name
+        # 1. 优先使用指定的适配器名称
         if adapter_name:
             adapter_class = self.get_adapter_class(adapter_name)
             if adapter_class:
-                logger.info(f"Use the specified adapter: {adapter_name}")
+                logger.info(f"使用指定适配器: {adapter_name}")
         
-        # 2. Find adapters by architecture
+        # 2. 根据架构查找适配器
         if not adapter_class and architecture:
             adapter_class = self.get_adapter_by_architecture(architecture)
             if adapter_class:
-                logger.info(f"Find the adapter by architecture: {architecture}")
+                logger.info(f"根据架构找到适配器: {architecture}")
         
-        # 3. Find adapters by framework
+        # 3. 根据框架查找适配器
         if not adapter_class and framework:
             adapter_class = self.get_adapter_by_framework(framework)
             if adapter_class:
-                logger.info(f"Find the adapter based on the framework: {framework}")
+                logger.info(f"根据框架找到适配器: {framework}")
         
-        # 4. If none are found, throw an exception
+        # 4. 如果都没找到，抛出异常
         if not adapter_class:
             available = list(self._adapters.keys())
             raise ValueError(
-                f"No suitable adapter found - adapter_name: {adapter_name}, "
+                f"未找到合适的适配器 - adapter_name: {adapter_name}, "
                 f"framework: {framework}, architecture: {architecture}. "
-                f"Available adapters: {available}"
+                f"可用适配器: {available}"
             )
         
-        # Creating an Adapter Instance
+        # 创建适配器实例
         try:
             adapter = adapter_class(model_path=model_path, **kwargs)
-            logger.info(f"Adapter instance created successfully: {adapter_class.__name__}")
+            logger.info(f"成功创建适配器实例: {adapter_class.__name__}")
             return adapter
         except Exception as e:
-            logger.error(f"Failed to create adapter: {e}")
+            logger.error(f"创建适配器失败: {e}")
             raise
     
     def list_adapters(self) -> Dict[str, Dict[str, Any]]:
-        """List all registered adapters"""
+        """列出所有注册的适配器"""
         adapters_info = {}
         
         for name, adapter_class in self._adapters.items():
-            # Find supported frameworks and architectures
+            # 查找支持的框架和架构
             frameworks = [k for k, v in self._framework_mappings.items() if v == name]
             architectures = [k for k, v in self._architecture_mappings.items() if v == name]
             
@@ -146,17 +146,19 @@ class AdapterRegistry:
                 'module': adapter_class.__module__,
                 'frameworks': frameworks,
                 'architectures': architectures,
-                'doc': adapter_class.__doc__ or "No description"
+                'doc': adapter_class.__doc__ or "无描述"
             }
         
         return adapters_info
     
     def _register_builtin_adapters(self):
-        """Registering the built-in adapter"""
-        # Register the built-in adapter we are about to implement here
+        """注册内置适配器 - 增强版本"""
+        logger.info("开始注册内置适配器...")
         
+        registration_results = {}
+        
+        # YOLO 检测适配器
         try:
-            # YOLO Detection Adapter
             from .detection.ultralytics import UltralyticsAdapter
             self.register(
                 'ultralytics',
@@ -166,11 +168,18 @@ class AdapterRegistry:
                               'yolov9c', 'yolov9e', 'yolov10n', 'yolov10s', 'yolov10x',
                               'yolo11n', 'yolo11s', 'yolo11m']
             )
-        except ImportError:
-            logger.debug("Ultralytics adapter not found, skipping registration")
+            registration_results['ultralytics'] = True
+            logger.info("✅ Ultralytics适配器注册成功")
+        except ImportError as e:
+            registration_results['ultralytics'] = False
+            logger.warning(f"❌ Ultralytics适配器注册失败: {e}")
+            logger.info("💡 请安装ultralytics: pip install ultralytics")
+        except Exception as e:
+            registration_results['ultralytics'] = False
+            logger.error(f"❌ Ultralytics适配器注册异常: {e}")
         
+        # SAM 分割适配器
         try:
-            # SAM Segmentation Adapter
             from .segmentation.sam import SAMAdapter
             self.register(
                 'sam',
@@ -178,11 +187,18 @@ class AdapterRegistry:
                 frameworks=['segment_anything'],
                 architectures=['sam_vit_h', 'sam_vit_l', 'sam_vit_b', 'mobile_sam']
             )
-        except ImportError:
-            logger.debug("SAM adapter not found, skipping registration")
+            registration_results['sam'] = True
+            logger.info("✅ SAM适配器注册成功")
+        except ImportError as e:
+            registration_results['sam'] = False
+            logger.warning(f"❌ SAM适配器注册失败: {e}")
+            logger.info("💡 请安装segment-anything: pip install segment-anything")
+        except Exception as e:
+            registration_results['sam'] = False
+            logger.error(f"❌ SAM适配器注册异常: {e}")
         
+        # DeepLabV3 分割适配器
         try:
-            # DeepLabV3 Segmentation Adapter
             from .segmentation.deeplabv3 import DeepLabV3Adapter
             self.register(
                 'deeplabv3',
@@ -190,11 +206,17 @@ class AdapterRegistry:
                 frameworks=['torchvision'],
                 architectures=['deeplabv3', 'deeplabv3_resnet50', 'deeplabv3_resnet101', 'deeplabv3_mobilenet']
             )
-        except ImportError:
-            logger.debug("DeepLabV3 adapter not found, skipping registration")
+            registration_results['deeplabv3'] = True
+            logger.info("✅ DeepLabV3适配器注册成功")
+        except ImportError as e:
+            registration_results['deeplabv3'] = False
+            logger.debug(f"DeepLabV3适配器注册失败: {e}")
+        except Exception as e:
+            registration_results['deeplabv3'] = False
+            logger.error(f"❌ DeepLabV3适配器注册异常: {e}")
         
+        # Torchvision 分类适配器
         try:
-            #  Torchvision Classification Adapter
             from .classification.torchvision import TorchvisionAdapter
             self.register(
                 'torchvision_classification',
@@ -209,11 +231,17 @@ class AdapterRegistry:
                               'vgg11', 'vgg13', 'vgg16', 'vgg19',
                               'vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32']
             )
-        except ImportError:
-            logger.debug("Torchvision adapter not found, skipping registration")
+            registration_results['torchvision_classification'] = True
+            logger.info("✅ Torchvision分类适配器注册成功")
+        except ImportError as e:
+            registration_results['torchvision_classification'] = False
+            logger.debug(f"Torchvision分类适配器注册失败: {e}")
+        except Exception as e:
+            registration_results['torchvision_classification'] = False
+            logger.error(f"❌ Torchvision分类适配器注册异常: {e}")
         
+        # Stable Diffusion 生成适配器
         try:
-            # Stable Diffusion Generation Adapter
             from .generation.stable_diffusion import StableDiffusionAdapter
             self.register(
                 'stable_diffusion',
@@ -221,11 +249,17 @@ class AdapterRegistry:
                 frameworks=['diffusers'],
                 architectures=['stable_diffusion', 'stable_diffusion_xl', 'sdxl', 'sd1', 'sd2']
             )
-        except ImportError:
-            logger.debug("Stable Diffusion adapter not found, skipping registration")
+            registration_results['stable_diffusion'] = True
+            logger.info("✅ Stable Diffusion适配器注册成功")
+        except ImportError as e:
+            registration_results['stable_diffusion'] = False
+            logger.debug(f"Stable Diffusion适配器注册失败: {e}")
+        except Exception as e:
+            registration_results['stable_diffusion'] = False
+            logger.error(f"❌ Stable Diffusion适配器注册异常: {e}")
 
+        # FLUX 生成适配器
         try:
-            # FLUX Generation Adapter
             from .generation.flux import FluxAdapter
             self.register(
                 'flux',
@@ -233,11 +267,17 @@ class AdapterRegistry:
                 frameworks=['diffusers'],
                 architectures=['flux', 'flux-dev', 'flux-schnell', 'flux-pro']
             )
-        except ImportError:
-            logger.debug("FLUX adapter not found, skipping registration")
+            registration_results['flux'] = True
+            logger.info("✅ FLUX适配器注册成功")
+        except ImportError as e:
+            registration_results['flux'] = False
+            logger.debug(f"FLUX适配器注册失败: {e}")
+        except Exception as e:
+            registration_results['flux'] = False
+            logger.error(f"❌ FLUX适配器注册异常: {e}")
         
+        # CLIP 多模态适配器（OpenAI CLIP）
         try:
-            # CLIP Multimodal Adapter（OpenAI CLIP）
             from .multimodal.clip import CLIPAdapter
             self.register(
                 'clip',
@@ -246,11 +286,17 @@ class AdapterRegistry:
                 architectures=['clip-vit-base', 'clip-vit-large', 'vit-b-32', 'vit-b-16', 
                               'vit-l-14', 'vit-l-14-336', 'rn50', 'rn101']
             )
-        except ImportError:
-            logger.debug("CLIP adapter not found, skipping registration")
+            registration_results['clip'] = True
+            logger.info("✅ CLIP适配器注册成功")
+        except ImportError as e:
+            registration_results['clip'] = False
+            logger.debug(f"CLIP适配器注册失败: {e}")
+        except Exception as e:
+            registration_results['clip'] = False
+            logger.error(f"❌ CLIP适配器注册异常: {e}")
         
+        # OpenCLIP 多模态适配器
         try:
-            # OpenCLIP Multimodal Adapter
             from .multimodal.openclip import OpenCLIPAdapter
             self.register(
                 'openclip',
@@ -258,69 +304,124 @@ class AdapterRegistry:
                 frameworks=['open_clip'],
                 architectures=['convnext', 'coca', 'eva', 'openclip-vit']
             )
-        except ImportError:
-            logger.debug("OpenCLIP adapter not found, skipping registration")
+            registration_results['openclip'] = True
+            logger.info("✅ OpenCLIP适配器注册成功")
+        except ImportError as e:
+            registration_results['openclip'] = False
+            logger.debug(f"OpenCLIP适配器注册失败: {e}")
+        except Exception as e:
+            registration_results['openclip'] = False
+            logger.error(f"❌ OpenCLIP适配器注册异常: {e}")
+        
+        # 汇总注册结果
+        success_count = sum(registration_results.values())
+        total_count = len(registration_results)
+        
+        logger.info(f"适配器注册完成: {success_count}/{total_count} 成功")
+        logger.info(f"已注册的适配器: {list(self._adapters.keys())}")
+        
+        # 如果没有任何适配器注册成功，发出警告
+        if success_count == 0:
+            logger.error("⚠️ 没有任何适配器注册成功！请检查依赖包安装")
+        elif 'ultralytics' not in self._adapters:
+            logger.warning("⚠️ 关键适配器 'ultralytics' 未注册，这可能影响YOLO模型的使用")
+    
+    def force_register_adapter(self, adapter_name: str) -> bool:
+        """
+        强制注册指定适配器
+        
+        Args:
+            adapter_name: 要注册的适配器名称
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if adapter_name == 'ultralytics':
+            try:
+                from .detection.ultralytics import UltralyticsAdapter
+                self.register(
+                    'ultralytics',
+                    UltralyticsAdapter,
+                    frameworks=['ultralytics', 'yolo'],
+                    architectures=['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x']
+                )
+                logger.info(f"✅ 强制注册 {adapter_name} 成功")
+                return True
+            except Exception as e:
+                logger.error(f"❌ 强制注册 {adapter_name} 失败: {e}")
+                return False
+        
+        # 可以为其他适配器添加类似的逻辑
+        logger.warning(f"不支持强制注册适配器: {adapter_name}")
+        return False
     
     def auto_detect_adapter(self, 
                            model_path: str,
                            model_info: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        Automatically detects the appropriate adapter.
-
+        自动检测适合的适配器
+        
         Args:
-            model_path: Model path
-            model_info: Model information (obtained from model_detector)
-
+            model_path: 模型路径
+            model_info: 模型信息（从model_detector获得）
+            
         Returns:
-            Adapter name
+            适配器名称
         """
         if model_info:
-            # 1. Matching by architecture
+            # 1. 根据架构匹配
             architecture = model_info.get('architecture', '').lower()
             for arch, adapter_name in self._architecture_mappings.items():
                 if arch.lower() in architecture:
-                    logger.info(f"Automatically select an adapter based on architecture: {adapter_name}")
+                    logger.info(f"根据架构 {architecture} 自动选择适配器: {adapter_name}")
                     return adapter_name
             
-            # 2. Matching by framework
+            # 2. 根据框架匹配
             framework = model_info.get('framework', '').lower()
             for fw, adapter_name in self._framework_mappings.items():
                 if fw.lower() in framework:
-                    logger.info(f"Automatically select an adapter based on the framework: {adapter_name}")
+                    logger.info(f"根据框架 {framework} 自动选择适配器: {adapter_name}")
                     return adapter_name
         
-        # 3. Heuristic matching based on file path and name
+        # 3. 根据文件路径和名称进行启发式匹配
         model_path_lower = str(model_path).lower()
         
-        # Detecting the YOLO model
+        # 检测YOLO模型
         if any(pattern in model_path_lower for pattern in ['yolo', 'yolov8', 'yolov9', 'yolov10', 'yolo11']):
-            return 'ultralytics'
+            detected_name = 'ultralytics'
+            if detected_name in self._adapters:
+                logger.info(f"根据路径检测到YOLO模型，选择适配器: {detected_name}")
+                return detected_name
+            else:
+                logger.warning(f"检测到YOLO模型但适配器 '{detected_name}' 未注册，尝试强制注册...")
+                if self.force_register_adapter(detected_name):
+                    return detected_name
         
-        # Detecting SAM Model
+        # 检测SAM模型
         if any(pattern in model_path_lower for pattern in ['sam_vit', 'mobile_sam']):
             return 'sam'
         
-        # Detecting Stable Diffusion Model
+        # 检测Stable Diffusion模型
         if any(pattern in model_path_lower for pattern in ['stable-diffusion', 'sd_', 'sdxl', 'flux']):
             return 'stable_diffusion'
         
-        # Detecting Classification Models
+        # 检测分类模型
         if any(pattern in model_path_lower for pattern in ['resnet', 'efficientnet', 'vit-']):
-            return 'torchvision'
+            return 'torchvision_classification'
         
-        # Detecting CLIP Model
+        # 检测CLIP模型
         if any(pattern in model_path_lower for pattern in ['clip', 'vit-b-32', 'vit-l-14']):
             return 'clip'
         
-        logger.warning(f"Unable to automatically detect adapter type: {model_path}")
+        logger.warning(f"无法自动检测适配器类型: {model_path}")
         return None
     
     def get_compatible_adapters(self, model_type: str) -> List[str]:
-        """Get a list of compatible adapters based on the model type"""
+        """根据模型类型获取兼容的适配器列表"""
         compatible = []
         
         for adapter_name, adapter_class in self._adapters.items():
-            # Check the base class type of the adapter
+            # 检查适配器的基类类型
             if hasattr(adapter_class, '__bases__'):
                 base_names = [base.__name__ for base in adapter_class.__bases__]
                 
@@ -338,11 +439,11 @@ class AdapterRegistry:
         return compatible
 
 
-# Global registry instance
+# 全局注册中心实例
 _registry = None
 
 def get_registry() -> AdapterRegistry:
-    """Get the global adapter registry instance"""
+    """获取全局适配器注册中心实例"""
     global _registry
     if _registry is None:
         _registry = AdapterRegistry()
@@ -353,18 +454,18 @@ def register_adapter(name: str,
                     adapter_class: Type[BaseModelAdapter],
                     frameworks: Optional[List[str]] = None,
                     architectures: Optional[List[str]] = None) -> None:
-    """Convenience function: register the adapter to the global registry"""
+    """便利函数：注册适配器到全局注册中心"""
     registry = get_registry()
     registry.register(name, adapter_class, frameworks, architectures)
 
 
 def create_adapter(model_path: str, **kwargs) -> BaseModelAdapter:
-    """Convenience function: creating an adapter instance"""
+    """便利函数：创建适配器实例"""
     registry = get_registry()
     return registry.create_adapter(model_path, **kwargs)
 
 
 def list_available_adapters() -> Dict[str, Dict[str, Any]]:
-    """Convenience function: List all available adapters"""
+    """便利函数：列出所有可用适配器"""
     registry = get_registry()
     return registry.list_adapters()

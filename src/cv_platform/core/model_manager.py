@@ -509,41 +509,144 @@ class ModelManager(BaseManager):
         
         try:
             # Check if model is available
-            if not self._available_models or model_name not in self._available_models:
-                available_models = list(self._available_models.keys()) if self._available_models else []
+            if model_name not in self._available_models:
+                available_models = list(self._available_models.keys())
                 raise ValueError(f"Model '{model_name}' not found. Available models: {available_models}")
             
             # Check cache first
             if self.cache:
-                cached_model = self.cache.get(model_name)
-                if cached_model:
-                    logger.info(f"Model '{model_name}' loaded from cache")
-                    return cached_model
+                cached_adapter = self.cache.get(model_name)
+                if cached_adapter:
+                    self.increment_metric('cache_hits')
+                    self.update_metric('last_cache_hit', time.time())
+                    logger.info(f"Model {model_name} loaded from cache")
+                    return cached_adapter
             
-            # Load model
-            model_config = self._available_models[model_name]['config']
+            # Load model if not cached
+            model_entry = self._available_models[model_name]
+            model_config = model_entry['config'].copy()
+            model_config.update(kwargs)  # Runtime parameters override configuration
             
-            # Use registry to create adapter
-            if self.registry:
-                adapter = self.registry.create_adapter(model_name, model_config, **kwargs)
-            else:
-                raise RuntimeError("Model registry not available")
+            # Parse model path
+            model_path = model_config['path']
+            if isinstance(model_path, str) and '{models_root}' in model_path:
+                models_root = self.config_manager.get_models_root()
+                model_path = model_path.format(models_root=models_root)
             
-            # Cache the loaded model
-            if self.cache:
-                self.cache.put(model_name, adapter)
+            # 确保 model_path 是字符串
+            model_path = str(model_path)
             
+            # Get the adapter name - 增加更多检测逻辑
+            adapter_name = model_config.get('adapter')
+            
+            if not adapter_name:
+                # 先尝试从配置中获取
+                framework = model_config.get('framework')
+                architecture = model_config.get('architecture')
+                model_type = model_config.get('type')
+                
+                # 手动检测逻辑
+                adapter_name = self._detect_adapter_manually(model_path, framework, architecture, model_type)
+                
+                if not adapter_name:
+                    # 尝试自动检测
+                    model_info = model_entry.get('model_info')
+                    adapter_name = self.registry.auto_detect_adapter(
+                        model_path, 
+                        model_info.__dict__ if model_info else None
+                    )
+                
+                if not adapter_name:
+                    raise ValueError(f"Unable to determine adapter type for model {model_name}")
+            
+            # Create adapter instance
+            logger.info(f"Loading model: {model_name} (adapter: {adapter_name})")
+            
+            # 创建适配器时确保参数正确
+            create_kwargs = {
+                'device': model_config.get('device', 'auto'),
+                'cache_enabled': model_config.get('cache_enabled', True)
+            }
+            create_kwargs.update(kwargs)
+            
+            adapter = self.registry.create_adapter(
+                model_path=model_path,
+                adapter_name=adapter_name,  # 明确指定适配器名称
+                **create_kwargs
+            )
+            
+            # Update metrics
             load_time = time.time() - load_start_time
-            self.update_metric(f'model_load_time_{model_name}', load_time)
+            self.increment_metric('models_loaded')
+            self.update_metric('total_load_time', self.get_metric('total_load_time', 0) + load_time)
+            self.update_metric('last_model_loaded', model_name)
+            self.update_metric('last_load_time', load_time)
             
-            logger.info(f"Model '{model_name}' loaded successfully in {load_time:.2f}s")
+            # Cache the adapter if caching is enabled
+            if self.cache and model_config.get('cache_enabled', True):
+                self.cache.set(model_name, adapter)
+            
+            logger.info(f"Model {model_name} loaded successfully in {load_time:.2f}s")
             return adapter
             
         except Exception as e:
             load_time = time.time() - load_start_time
-            self.update_metric(f'model_load_error_{model_name}', str(e))
-            logger.error(f"Failed to load model '{model_name}' after {load_time:.2f}s: {e}")
+            self.increment_metric('load_failures')
+            self.update_metric('last_load_error', str(e))
+            logger.error(f"Failed to load model {model_name} after {load_time:.2f}s: {e}")
             raise
+
+    def _detect_adapter_manually(self, model_path: str, framework: str = None, architecture: str = None, model_type: str = None) -> str:
+        """
+        手动检测适配器类型
+        """
+        model_path_lower = str(model_path).lower()
+        
+        # 1. 基于框架检测
+        if framework:
+            framework_lower = framework.lower()
+            if framework_lower in ['ultralytics', 'yolo']:
+                return 'ultralytics'
+            elif framework_lower in ['segment_anything', 'sam']:
+                return 'sam'
+            elif framework_lower in ['diffusers', 'stable_diffusion']:
+                return 'stable_diffusion'
+            elif framework_lower in ['torchvision']:
+                return 'torchvision_classification'
+            elif framework_lower in ['clip', 'openai']:
+                return 'clip'
+        
+        # 2. 基于文件路径检测
+        if any(pattern in model_path_lower for pattern in ['yolo', 'yolov8', 'yolov9', 'yolov10', 'yolo11']):
+            return 'ultralytics'
+        
+        if any(pattern in model_path_lower for pattern in ['sam_vit', 'mobile_sam']):
+            return 'sam'
+        
+        if any(pattern in model_path_lower for pattern in ['stable-diffusion', 'sd_', 'sdxl', 'flux']):
+            return 'stable_diffusion'
+        
+        if any(pattern in model_path_lower for pattern in ['resnet', 'efficientnet', 'vit']):
+            return 'torchvision_classification'
+        
+        if any(pattern in model_path_lower for pattern in ['clip']):
+            return 'clip'
+        
+        # 3. 基于模型类型检测
+        if model_type:
+            type_lower = model_type.lower()
+            if type_lower == 'detection':
+                return 'ultralytics'  # 默认检测器
+            elif type_lower == 'segmentation':
+                return 'sam'  # 默认分割器
+            elif type_lower == 'classification':
+                return 'torchvision_classification'
+            elif type_lower == 'generation':
+                return 'stable_diffusion'
+            elif type_lower == 'multimodal':
+                return 'clip'
+        
+        return None
     
     def get_system_status(self) -> Dict[str, Any]:
         """Get comprehensive system status"""
