@@ -169,7 +169,7 @@ CONSOLE_SCRIPTS = [
     "cv-platform=cv_platform.cli.main:app",
     "cv-detect-models=cv_platform.scripts.detect_models:main",
     "cv-setup=cv_platform.scripts.setup_environment:main",
-    "cv-server=cv_platform.api.rest_api:main",
+    "cv-server=cv_platform.api:main",
     "cv-benchmark=cv_platform.scripts.benchmark:main",
 ]
 
