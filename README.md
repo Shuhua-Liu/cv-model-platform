@@ -117,7 +117,9 @@ Full compatibility list: [Model Compatibility Matrix](docs/compatibility_matrix.
 
 ```bash
 # Start API service
-python -m cv_platform.api.rest_api
+python -m cv_platform.api
+python src/cv_platform/api/main.py
+python scripts/start_api.py --host 0.0.0.0 --port 8000 workers 1
 
 # Use API
 curl -X POST "http://localhost:8000/predict/yolov8n" \
