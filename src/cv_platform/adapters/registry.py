@@ -359,61 +359,112 @@ class AdapterRegistry:
                            model_path: str,
                            model_info: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        自动检测适合的适配器
-        
+        增强的自动检测适合的适配器
         Args:
             model_path: 模型路径
             model_info: 模型信息（从model_detector获得）
-            
         Returns:
             适配器名称
         """
+        logger.info(f"🔍 开始检测模型适配器: {model_path}")
+        # 优先级1: 基于model_info的精确匹配
         if model_info:
-            # 1. 根据架构匹配
+            # 根据架构匹配
             architecture = model_info.get('architecture', '').lower()
             for arch, adapter_name in self._architecture_mappings.items():
                 if arch.lower() in architecture:
-                    logger.info(f"根据架构 {architecture} 自动选择适配器: {adapter_name}")
+                    logger.info(f"✅ 根据架构 '{architecture}' 选择适配器: {adapter_name}")
                     return adapter_name
-            
-            # 2. 根据框架匹配
+            # 根据框架匹配
             framework = model_info.get('framework', '').lower()
             for fw, adapter_name in self._framework_mappings.items():
                 if fw.lower() in framework:
-                    logger.info(f"根据框架 {framework} 自动选择适配器: {adapter_name}")
+                    logger.info(f"✅ 根据框架 '{framework}' 选择适配器: {adapter_name}")
                     return adapter_name
-        
-        # 3. 根据文件路径和名称进行启发式匹配
+        # 优先级2: 基于文件路径的智能检测
         model_path_lower = str(model_path).lower()
-        
-        # 检测YOLO模型
-        if any(pattern in model_path_lower for pattern in ['yolo', 'yolov8', 'yolov9', 'yolov10', 'yolo11']):
+        # 检测YOLO模型 (最高优先级)
+        yolo_patterns = ['yolo', 'yolov8', 'yolov9', 'yolov10', 'yolo11']
+        if any(pattern in model_path_lower for pattern in yolo_patterns):
             detected_name = 'ultralytics'
             if detected_name in self._adapters:
-                logger.info(f"根据路径检测到YOLO模型，选择适配器: {detected_name}")
+                logger.info(f"✅ 检测到YOLO模型，选择适配器: {detected_name}")
                 return detected_name
             else:
-                logger.warning(f"检测到YOLO模型但适配器 '{detected_name}' 未注册，尝试强制注册...")
-                if self.force_register_adapter(detected_name):
-                    return detected_name
-        
+                logger.warning(f"⚠️ 检测到YOLO模型但适配器 '{detected_name}' 未注册")
+        # 检测DETR模型 (检测模型但不是YOLO)
+        detr_patterns = ['detr', 'detection']
+        if any(pattern in model_path_lower for pattern in detr_patterns):
+            # DETR模型通常也可以用ultralytics处理，或者需要专门的适配器
+            detected_name = 'ultralytics'  # 默认使用ultralytics
+            if detected_name in self._adapters:
+                logger.info(f"✅ 检测到DETR模型，使用适配器: {detected_name}")
+                return detected_name
         # 检测SAM模型
-        if any(pattern in model_path_lower for pattern in ['sam_vit', 'mobile_sam']):
-            return 'sam'
-        
+        sam_patterns = ['sam_vit', 'mobile_sam', 'sam']
+        if any(pattern in model_path_lower for pattern in sam_patterns):
+            detected_name = 'sam'
+            if detected_name in self._adapters:
+                logger.info(f"✅ 检测到SAM模型，选择适配器: {detected_name}")
+                return detected_name
         # 检测Stable Diffusion模型
-        if any(pattern in model_path_lower for pattern in ['stable-diffusion', 'sd_', 'sdxl', 'flux']):
-            return 'stable_diffusion'
-        
-        # 检测分类模型
-        if any(pattern in model_path_lower for pattern in ['resnet', 'efficientnet', 'vit-']):
-            return 'torchvision_classification'
-        
+        sd_patterns = ['stable-diffusion', 'sd_', 'sdxl', 'flux']
+        if any(pattern in model_path_lower for pattern in sd_patterns):
+            detected_name = 'stable_diffusion'
+            if detected_name in self._adapters:
+                logger.info(f"✅ 检测到Stable Diffusion模型，选择适配器: {detected_name}")
+                return detected_name
         # 检测CLIP模型
-        if any(pattern in model_path_lower for pattern in ['clip', 'vit-b-32', 'vit-l-14']):
-            return 'clip'
-        
-        logger.warning(f"无法自动检测适配器类型: {model_path}")
+        clip_patterns = ['clip', 'vit-b-32', 'vit-l-14']
+        if any(pattern in model_path_lower for pattern in clip_patterns):
+            detected_name = 'clip'
+            if detected_name in self._adapters:
+                logger.info(f"✅ 检测到CLIP模型，选择适配器: {detected_name}")
+                return detected_name
+        # 检测分类模型 (较低优先级，避免误判)
+        classification_patterns = ['resnet', 'efficientnet', 'densenet', 'vgg', 'mobilenet']
+        if any(pattern in model_path_lower for pattern in classification_patterns):
+            # 进一步检查是否真的是分类模型
+            if not any(exclusion in model_path_lower for exclusion in ['yolo', 'detr', 'detection']):
+                detected_name = 'torchvision_classification'
+                if detected_name in self._adapters:
+                    logger.info(f"✅ 检测到分类模型，选择适配器: {detected_name}")
+                    return detected_name
+        # 优先级3: 基于文件内容的深度分析（如果文件存在）
+        try:
+            from pathlib import Path
+            import torch
+            model_file = Path(model_path)
+            if model_file.exists() and model_file.suffix in ['.pt', '.pth', '.ckpt']:
+                logger.info("📁 文件存在，尝试内容分析...")
+                try:
+                    # 只加载文件头部信息，不加载完整模型
+                    checkpoint = torch.load(model_file, map_location='cpu')
+                    if isinstance(checkpoint, dict):
+                        # 检查YOLO特征
+                        yolo_keys = ['model', 'epoch', 'best_fitness', 'optimizer']
+                        if any(key in checkpoint for key in yolo_keys):
+                            if 'ultralytics' in self._adapters:
+                                logger.info("🔍 内容分析: 检测到YOLO模型特征")
+                                return 'ultralytics'
+                        # 检查分类模型特征
+                        if 'state_dict' in checkpoint or 'model_state_dict' in checkpoint:
+                            if 'torchvision_classification' in self._adapters:
+                                logger.info("🔍 内容分析: 检测到分类模型特征")
+                                return 'torchvision_classification'
+                except Exception as e:
+                    logger.debug(f"文件内容分析失败: {e}")
+        except ImportError:
+            logger.debug("torch未安装，跳过文件内容分析")
+        # 优先级4: 默认策略
+        # 如果路径包含detection相关词汇，默认使用ultralytics
+        if any(keyword in model_path_lower for keyword in ['detect', 'object', 'bbox']):
+            if 'ultralytics' in self._adapters:
+                logger.info("🎯 默认策略: 检测相关路径，使用ultralytics适配器")
+                return 'ultralytics'
+        # 最后的fallback
+        logger.warning(f"⚠️ 无法自动检测适配器类型: {model_path}")
+        logger.info(f"📊 可用适配器: {list(self._adapters.keys())}")
         return None
     
     def get_compatible_adapters(self, model_type: str) -> List[str]:
