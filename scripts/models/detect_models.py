@@ -59,6 +59,7 @@ class IntelligentModelFilter:
     # Known component patterns to group/deduplicate
     COMPONENT_PATTERNS = {
         'stable_diffusion': ['unet', 'vae', 'text_encoder', 'tokenizer', 'scheduler'],
+        'flux': ['transformer', 'vae', 'text_encoder', 'text_encoder_2', 'tokenizer'],
         'clip': ['vision_model', 'text_model'],
         'blip': ['vision_model', 'text_decoder'],
         'detectron2': ['model_final', 'config']
@@ -105,12 +106,41 @@ class IntelligentModelFilter:
             models_by_dir[parent_dir].append(model)
         
         return dict(models_by_dir)
-    
+
     def _identify_huggingface_models(self, models_by_dir: Dict[Path, List[ModelInfo]]) -> Set[Path]:
         """Identify directories that contain HuggingFace models"""
         hf_directories = set()
-        
+
         for directory, models in models_by_dir.items():
+            dir_name = directory.name.lower()
+            single_file_patterns = ['yolo', 'sam_vit', 'resnet', 'efficientnet']
+            is_single_file_dir = any(pattern in dir_name for pattern in single_file_patterns)
+
+            if is_single_file_dir:
+                logger.debug(f"Skipping HF detection for single-file model dir: {directory}")
+                continue
+
+            generation_model_patterns = [
+                'sd_2_1', 'sd_1_5', 'sd_2_0', 'sdxl',
+                'stable_diffusion_2_1', 'stable_diffusion_1_5',
+                'flux', 'controlnet-'
+            ]
+
+            is_generation_model_dir = any(pattern in dir_name for pattern in generation_model_patterns)
+
+            if is_generation_model_dir:
+                has_subdirs = any(
+                    (directory / subdir).exists() and (directory / subdir).is_dir()
+                    for subdir in ['unet', 'vae', 'text_encoder', 'text_encoder_2', 'transformer', 
+                                   'tokenizer', 'scheduler', 'vae_encoder', 
+                                   'vae_decoder', 'image_encoder', 'image_normalizer']
+                )
+
+                if has_subdirs or len(models) > 1:
+                    hf_directories.add(directory)
+                    logger.debug(f"Identified generation model directory: {directory}")
+                    continue
+    
             # Check for HuggingFace config files
             has_config = any(
                 (directory / config_file).exists() 
@@ -145,6 +175,14 @@ class IntelligentModelFilter:
         
         for model in models:
             model_dir = model.path.parent
+            parent_hf_dir = None
+
+            current_dir = model_dir
+            while current_dir != current_dir.parent:
+                if current_dir in hf_directories:
+                    parent_hf_dir = current_dir
+                    break
+                current_dir = current_dir.parent
             
             # If this is inside a HuggingFace directory, create a representative model
             if model_dir in hf_directories:
@@ -154,7 +192,7 @@ class IntelligentModelFilter:
                     dir_model = self._create_directory_model(model_dir, models)
                     if dir_model:
                         filtered_models.append(dir_model)
-                    self.processed_paths.add(model_dir)
+                    self.processed_paths.add(parent_hf_dir)
             else:
                 # Regular single-file model
                 filtered_models.append(model)
@@ -223,18 +261,38 @@ class IntelligentModelFilter:
     def _analyze_directory_model(self, directory: Path) -> Tuple[str, str, str]:
         """Analyze directory to determine model characteristics"""
         dir_name = directory.name.lower()
+
+        stable_diffusion_patterns = [
+            'stable-diffusion', 'stable_diffusion',
+            'sd_', 'sd-',
+            'sdxl',
+            'sd_1_5', 'sd_2_1', 'sd_2_0',
+            'sd2_1_unclip', 'sd_2_1_unclip'
+        ]
         
-        # Check for known patterns
-        if any(pattern in dir_name for pattern in ['stable-diffusion', 'sd-', 'sdxl']):
-            return 'generation', 'diffusers', 'stable_diffusion'
-        elif 'clip' in dir_name:
+        # Check for known patterns     
+        if any(pattern in dir_name for pattern in stable_diffusion_patterns):
+            if 'unclip' in dir_name:
+                if '2_1' in dir_name or '2.1' in dir_name:
+                    return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip'
+                else:
+                    return 'generation', 'diffusers', 'stable_diffusion_unclip'
+            elif 'sdxl' in dir_name or 'xl' in dir_name:
+                return 'generation', 'diffusers', 'stable_diffusion_xl'
+            elif '2_1' in dir_name or '2.1' in dir_name:
+                return 'generation', 'diffusers', 'stable_diffusion_2_1'
+            elif '1_5' in dir_name or '1.5' in dir_name:
+                return 'generation', 'diffusers', 'stable_diffusion_1_5'
+            else:
+                return 'generation', 'diffusers', 'stable_diffusion'
+        elif any(pattern in dir_name for pattern in ['clip', 'openai']):
             return 'multimodal', 'transformers', 'clip'
-        elif 'blip' in dir_name:
-            return 'multimodal', 'transformers', 'blip'
-        elif any(pattern in dir_name for pattern in ['llava', 'multimodal']):
-            return 'multimodal', 'transformers', 'multimodal'
-        elif any(pattern in dir_name for pattern in ['bert', 'roberta', 'gpt']):
-            return 'text', 'transformers', 'language_model'
+        elif any(pattern in dir_name for pattern in ['yolo', 'detection']):
+            return 'detection', 'ultralytics', 'yolo'
+        elif any(pattern in dir_name for pattern in ['sam', 'segmentation']):
+            return 'segmentation', 'segment_anything', 'sam'
+        elif any(pattern in dir_name for pattern in ['resnet', 'efficientnet', 'vit']):
+            return 'classification', 'torchvision', 'classifier'
         
         # Check parent directory structure for hints
         parent_parts = [p.lower() for p in directory.parts]
@@ -244,6 +302,10 @@ class IntelligentModelFilter:
             return 'multimodal', 'huggingface', 'unknown'
         elif 'classification' in parent_parts:
             return 'classification', 'huggingface', 'unknown'
+        elif 'detection' in parent_parts:
+            return 'detection', 'huggingface', 'unknown'
+        elif 'segmentation' in parent_parts:
+            return 'segmentation', 'huggingface', 'unknown'
         
         return 'unknown', 'huggingface', 'unknown'
     
@@ -255,6 +317,7 @@ class IntelligentModelFilter:
         for model in models:
             # Create a key based on name and characteristics
             key = (model.name.lower(), model.type, model.framework)
+            # key = (str(model.path), model.type, model.framework)
             
             if key not in seen_models:
                 seen_models[key] = model
