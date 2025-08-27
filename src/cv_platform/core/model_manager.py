@@ -49,6 +49,15 @@ class ModelCache:
         self._access_times[key] = time.time()
         self._load_times[key] = time.time()
     
+    def set(self, model_name: str, adapter: BaseModelAdapter) -> None:
+       """
+       Cache the model adapter (alias for put method)
+       Args:
+           model_name: Name of the model
+           adapter: Model adapter instance
+       """
+       self.put(model_name, adapter)
+
     def remove(self, key: str) -> None:
         """Remove model from cache"""
         if key in self._cache:
@@ -584,7 +593,14 @@ class ModelManager(BaseManager):
             
             # Cache the adapter if caching is enabled
             if self.cache and model_config.get('cache_enabled', True):
-                self.cache.set(model_name, adapter)
+                self.cache.put(model_name, adapter)
+                self.increment_metric('models_cached')
+
+            load_time = time.time() - load_start_time
+            self.increment_metric('models_loaded')
+            self.increment_metric('cache_misses')
+            self.update_metric('last_load_time', load_time)
+            self.update_metric('total_load_time', self.get_metric('total_load_time', 0) + load_time)
             
             logger.info(f"Model {model_name} loaded successfully in {load_time:.2f}s")
             return adapter
@@ -598,11 +614,17 @@ class ModelManager(BaseManager):
 
     def _detect_adapter_manually(self, model_path: str, framework: str = None, architecture: str = None, model_type: str = None) -> str:
         """
-        手动检测适配器类型
+        Detect adapter manually
         """
         model_path_lower = str(model_path).lower()
+        logger.info(f"🔧 Detect adapter manually:")
+        logger.info(f"   Path: {model_path}")
+        logger.info(f"   Framework: {framework}")
+        logger.info(f"   Architecture: {architecture}")
+        logger.info(f"   Type: {model_type}")
+
         
-        # 1. 基于框架检测
+        # 1. Based on framework
         if framework:
             framework_lower = framework.lower()
             if framework_lower in ['ultralytics', 'yolo']:
@@ -616,8 +638,11 @@ class ModelManager(BaseManager):
             elif framework_lower in ['clip', 'openai']:
                 return 'clip'
         
-        # 2. 基于文件路径检测
+        # 2. Based on model path
         if any(pattern in model_path_lower for pattern in ['yolo', 'yolov8', 'yolov9', 'yolov10', 'yolo11']):
+            return 'ultralytics'
+
+        if any(pattern in model_path_lower for pattern in ['detr']):
             return 'ultralytics'
         
         if any(pattern in model_path_lower for pattern in ['sam_vit', 'mobile_sam']):
@@ -626,19 +651,21 @@ class ModelManager(BaseManager):
         if any(pattern in model_path_lower for pattern in ['stable-diffusion', 'sd_', 'sdxl', 'flux']):
             return 'stable_diffusion'
         
-        if any(pattern in model_path_lower for pattern in ['resnet', 'efficientnet', 'vit']):
-            return 'torchvision_classification'
-        
         if any(pattern in model_path_lower for pattern in ['clip']):
             return 'clip'
+
+        if any(pattern in model_path_lower for pattern in ['resnet', 'efficientnet', 'vit']):
+            # Ensure not detection model
+            if not any(exclusion in model_path_lower for exclusion in ['yolo', 'detr', 'detection']):
+                return 'torchvision_classification'
         
-        # 3. 基于模型类型检测
+        # 3. Based on model type
         if model_type:
             type_lower = model_type.lower()
             if type_lower == 'detection':
-                return 'ultralytics'  # 默认检测器
+                return 'ultralytics'  # default detector
             elif type_lower == 'segmentation':
-                return 'sam'  # 默认分割器
+                return 'sam'  # default segmentation model
             elif type_lower == 'classification':
                 return 'torchvision_classification'
             elif type_lower == 'generation':
@@ -646,6 +673,7 @@ class ModelManager(BaseManager):
             elif type_lower == 'multimodal':
                 return 'clip'
         
+        logger.warning("   ❌ Manually detection failed.")
         return None
     
     def get_system_status(self) -> Dict[str, Any]:
