@@ -113,6 +113,17 @@ class IntelligentModelFilter:
 
         for directory, models in models_by_dir.items():
             dir_name = directory.name.lower()
+            
+            component_subdir_patterns = [
+                'unet', 'vae', 'text_encoder', 'text_encoder_2', 'transformer',
+                'tokenizer', 'scheduler', 'safety_checker', 'feature_extractor',
+                'vae_encoder', 'vae_decoder', 'image_encoder', 'image_normalizer', 'vae_1_0'
+            ]
+
+            if dir_name in component_subdir_patterns:
+                logger.debug(f"Skipping component subdirectory: {directory}")
+                continue
+
             single_file_patterns = ['yolo', 'sam_vit', 'resnet', 'efficientnet']
             is_single_file_dir = any(pattern in dir_name for pattern in single_file_patterns)
 
@@ -131,9 +142,7 @@ class IntelligentModelFilter:
             if is_generation_model_dir:
                 has_subdirs = any(
                     (directory / subdir).exists() and (directory / subdir).is_dir()
-                    for subdir in ['unet', 'vae', 'text_encoder', 'text_encoder_2', 'transformer', 
-                                   'tokenizer', 'scheduler', 'vae_encoder', 
-                                   'vae_decoder', 'image_encoder', 'image_normalizer']
+                    for subdir in component_subdir_patterns
                 )
 
                 if has_subdirs or len(models) > 1:
@@ -175,8 +184,8 @@ class IntelligentModelFilter:
         
         for model in models:
             model_dir = model.path.parent
+            
             parent_hf_dir = None
-
             current_dir = model_dir
             while current_dir != current_dir.parent:
                 if current_dir in hf_directories:
@@ -184,17 +193,14 @@ class IntelligentModelFilter:
                     break
                 current_dir = current_dir.parent
             
-            # If this is inside a HuggingFace directory, create a representative model
-            if model_dir in hf_directories:
-                # Check if we already processed this directory
-                if model_dir not in self.processed_paths:
-                    # Create a directory-level model entry
-                    dir_model = self._create_directory_model(model_dir, models)
-                    if dir_model:
-                        filtered_models.append(dir_model)
-                    self.processed_paths.add(parent_hf_dir)
+            if parent_hf_dir is not None:
+                if model_dir == parent_hf_dir:
+                    if parent_hf_dir not in self.processed_paths:
+                        dir_model = self._create_directory_model(parent_hf_dir, models)
+                        if dir_model:
+                            filtered_models.append(dir_model)
+                        self.processed_paths.add(parent_hf_dir)  
             else:
-                # Regular single-file model
                 filtered_models.append(model)
         
         return filtered_models
