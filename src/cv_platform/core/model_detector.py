@@ -46,18 +46,28 @@ class ModelDetector(BaseManager):
                 'type': 'detection',
                 'framework': 'ultralytics'
             },
+            'detr': {
+                'patterns': ['detr', 'detr-resnet-101'],
+                'type': 'detection',
+                'framework': 'huggingface'
+            },
             'sam': {
                 'patterns': ['sam_vit', 'mobile_sam', 'segment_anything'],
                 'type': 'segmentation',
                 'framework': 'segment_anything'
             },
+            'controlnet':{
+                'patterns': ['controlnet-canny', 'controlnet-seg', 'controlnet-depth', 'controlnet-pose'],
+                'type': 'generation',
+                'framwork': 'diffusers'
+            },
             'stable_diffusion': {
-                'patterns': ['stable-diffusion', 'sd_', 'sdxl', 'flux'],
+                'patterns': ['stable_diffusion', 'sd_2_1', 'sd_2_1_unclip', 'sdxl', 'flux'],
                 'type': 'generation',
                 'framework': 'diffusers'
             },
             'clip': {
-                'patterns': ['clip', 'vit-b-32', 'vit-l-14'],
+                'patterns': ['clip', 'vit-b-32', 'vit-h-14'],
                 'type': 'multimodal',
                 'framework': 'transformers'
             },
@@ -391,6 +401,8 @@ class ModelDetector(BaseManager):
         """
         filename = file_path.name.lower()
         parent_dirs = [p.lower() for p in file_path.parent.parts]
+        full_path_lower = str(file_path).lower()
+        file_size_mb = file_path.stat().st_size / (1024 * 1024)
         
         # Specific pattern matching with high confidence
         
@@ -413,16 +425,116 @@ class ModelDetector(BaseManager):
         elif 'mobile_sam' in filename:
             return 'segmentation', 'segment_anything', 'mobile_sam', 0.9
         
-        # Stable Diffusion
-        if any(pattern in filename for pattern in ['stable-diffusion', 'sd_1_5', 'sdxl']):
-            if 'sdxl' in filename:
-                return 'generation', 'diffusers', 'sdxl', 0.9
+        # ControlNet
+        if 'generation' in parent_dirs and 'controlnet' in parent_dirs:
+            controlnet_model_dir = None
+            for parent_dir in parent_dirs:
+                if 'controlnet' in parent_dir or ('controlnet' in parent_dir and parent_dir != 'controlnet'):
+                    controlnet_model_dir = parent_dir
+                    break
+            
+            if controlnet_model_dir:
+                if 'canny' in controlnet_model_dir:
+                    return 'generation', 'diffusers', 'controlnet_canny', 0.95
+                elif 'depth' in controlnet_model_dir:
+                    return 'generation', 'diffusers', 'controlnet_depth', 0.95
+                elif 'seg' in controlnet_model_dir:
+                    return 'generation', 'diffusers', 'controlnet_seg', 0.95
+                elif 'pose' in controlnet_model_dir:
+                    return 'generation', 'diffusers', 'controlnet_pose', 0.95
+                elif 'inpaint' in controlnet_model_dir:
+                    return 'generation', 'diffusers', 'controlnet_inpaint', 0.95
+                else:
+                    return 'generation' , 'diffusers', 'controlnet', 0.9
             else:
-                return 'generation', 'diffusers', 'stable_diffusion', 0.9
+                return 'generation' , 'diffusers', 'controlnet', 0.85
+
+        # Stable Diffusion
+        # if 'generation' in parent_dirs and 'stable_diffusion' in parent_dirs:
+        #     sd_version_dir = None
+        #     for parent_dir in parent_dirs:
+        #         if any(version in parent_dir for version in ['sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']):
+        #             sd_version_dir = parent_dir
+        #             break
+            
+        #     if sd_version_dir:
+        #         if 'sd_2_1_unclip' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95 
+        #         elif 'sd_2_1' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_2_1', 0.95 
+        #         elif 'sd_1_5' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_1_5', 0.95 
+        #         elif 'sd_2_0' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_2_0', 0.95 
+        #         elif 'sdxl' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_xl', 0.95 
+        #     else:
+        #         return 'generation', 'diffusers', 'stable_diffusion', 0.8
         
-        # CLIP
-        if any(pattern in filename for pattern in ['clip', 'vit-b-32', 'vit-l-14']):
-            arch = 'vit-b-32' if 'vit-b-32' in filename else ('vit-l-14' if 'vit-l-14' in filename else 'clip')
+        # # Other models in generation dir  
+        # if 'generation' in parent_dirs:
+        #     if any(pattern in full_path_lower for pattern in ['flux', 'dalle']):
+        #         return 'generation', 'diffusers', 'text_to_image', 0.8
+        #     elif any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion']):
+        #         return 'generation', 'diffusers', 'stable_diffusion', 0.7
+        
+        
+        sd_patterns = ['stable-diffusion', 'stable_diffusion', 'sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']
+        has_sd_in_filename = any(pattern in filename for pattern in sd_patterns)
+        has_sd_in_path = any(pattern in full_path_lower for pattern in sd_patterns)
+        
+        if has_sd_in_filename or has_sd_in_path:
+            if 'sdxl' in full_path_lower or 'xl' in full_path_lower:
+                return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
+            elif 'sd_2_1' in full_path_lower or 'sd-2-1' in full_path_lower or 'v2-1' in full_path_lower:
+                if 'unclip' in full_path_lower:
+                    return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95
+                else:
+                    'generation', 'diffusers', 'stable_diffusion_2_1', 0.9
+            elif 'sd_1_5' in full_path_lower or 'sd-1-5' in full_path_lower or '1.5' in full_path_lower:
+                return 'generation', 'diffusers', 'stable_diffusion_1_5', 0.9
+            elif 'sd_2_0' in full_path_lower or 'sd-2-0' in full_path_lower or '2.0' in full_path_lower:
+                return 'generation', 'diffusers', 'stable_diffusion_2_0', 0.9
+            else:
+                return 'generation', 'diffusers', 'stable_diffusion', 0.8
+            
+        if any(pattern in filename for pattern in ['stable_diffusion', 'stable-diffusion', 'sd_']):
+            if 'unclip' in filename:
+                if any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
+                    return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
+                else:
+                    return 'generation', 'diffusers', 'stable_diffusion_unclip', 0.85
+            elif any(pattern in filename for pattern in ['sdxl', 'xl']): 
+                return 'generation', 'diffusers', 'sdxl', 0.9
+            elif any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
+                if 'unclip' not in filename:
+                    return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.95
+                else:
+                    return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
+            elif any(pattern in filename for pattern in ['v1.5', '1.5', '1_5']): 
+                return 'generation', 'diffusers', 'stable_diffusion_1_5', 0.9
+            else:
+                if any(keyword in filename for keyword in ['768-nonema-pruned', '768-ema-pruned']):
+                    if 'unclip' in filename:
+                        return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.9
+                    else:
+                        return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.9
+                return 'generation', 'diffusers', 'stable_diffusion', 0.7
+        
+        elif any(pattern in filename for pattern in ['sd_2_1', 'sd-2-1']):
+            if 'unclip' in filename:
+                return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
+            else:
+                return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.95
+        elif any(pattern in filename for pattern in ['sd_1_5', 'sd-1-5']):
+            return ' generation', 'diffusers', 'stable_diffusion_1_5', 0.9
+        elif 'sdxl' in filename:
+            return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
+
+        
+        # OpenCLIP
+        if any(pattern in filename for pattern in ['clip', 'vit-b-32', 'vit-h-14']):
+            arch = 'vit-b-32' if 'vit-b-32' in filename else ('vit-h-14' if 'vit-h-14' in filename else 'clip')
             return 'multimodal', 'transformers', arch, 0.9
         
         # ResNet Classification
@@ -464,9 +576,23 @@ class ModelDetector(BaseManager):
         elif 'classification' in parent_dirs:
             return 'classification', 'unknown', 'unknown', 0.6
         elif 'generation' in parent_dirs:
-            return 'generation', 'unknown', 'unknown', 0.6
+            if 'unet' in filename and file_size_mb > 500:
+                return 'generation', 'diffusers', 'unet', 0.9
+            elif 'vae' in filename and file_size_mb > 80:
+                return 'generation', 'diffusers', 'vae', 0.8
+            elif 'controlnet' in filename and file_size_mb > 100:
+                return 'generation', 'diffusers', 'controlnet', 0.9
+            elif 'flux' in filename and file_size_mb > 1000:
+                return 'generation', 'diffusers', 'flux', 0.9
+            elif any(pattern in filename for pattern in ['sd_2_1', 'sdxl']) and file_size_mb > 2000:
+                return 'generation', 'diffusers', 'stable_diffusion', 0.95
+            else:
+                return 'generation', 'unknown', 'unknown', 0.3
         elif 'multimodal' in parent_dirs:
-            return 'multimodal', 'unknown', 'unknown', 0.6
+            if 'clip' in filename and file_size_mb > 1000:
+                return 'multimodal', 'transformers', 'clip', 0.9
+            else:
+                return 'multimodal', 'unknown', 'unknown', 0.6
         
         # General pattern matching with lower confidence
         for pattern_group, info in self.MODEL_PATTERNS.items():
