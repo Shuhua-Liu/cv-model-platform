@@ -1,9 +1,9 @@
 """
-OpenCLIP 多模态适配器 - 支持OpenCLIP模型
+OpenCLIP Multimodal Adapter - Supports OpenCLIP Models
 
-支持的模型：
-- OpenCLIP: ViT-B-32, ViT-B-16, ViT-L-14, ConvNeXt, CoCa, EVA等
-- 各种预训练数据集: LAION-2B, LAION-400M, OpenAI等
+Supported Models:
+    - OpenCLIP: ViT-B-32, ViT-B-16, ViT-L-14, ConvNeXt, CoCa, EVA, etc.
+    - Various pre-training datasets: LAION-2B, LAION-400M, OpenAI, etc.
 """
 
 import time
@@ -22,11 +22,11 @@ try:
     OPEN_CLIP_AVAILABLE = True
 except ImportError:
     OPEN_CLIP_AVAILABLE = False
-    logger.warning("open_clip_torch未安装，OpenCLIP适配器将不可用")
+    logger.warning("open_clip_torch is not installed; the OpenCLIP adapter will be unavailable.")
 
 
 class OpenCLIPAdapter(MultimodalAdapter):
-    """OpenCLIP多模态模型适配器"""
+    """OpenCLIP Multimodal Model Adapter"""
     
     def __init__(self, 
                  model_path: Union[str, Path],
@@ -35,39 +35,39 @@ class OpenCLIPAdapter(MultimodalAdapter):
                  batch_size: int = 32,
                  **kwargs):
         """
-        初始化OpenCLIP适配器
+        Initialize OpenCLIP Adapter
         
         Args:
-            model_path: 模型名称或文件路径
-            device: 计算设备
-            pretrained: 预训练数据集名称
-            batch_size: 批处理大小
+            model_path: Model name or file path
+            device: Computing device
+            pretrained: Pre-trained dataset name
+            batch_size: Batch size
         """
         if not OPEN_CLIP_AVAILABLE:
-            raise ImportError("需要安装open_clip_torch: pip install open_clip_torch")
+            raise ImportError("Require install open_clip_torch: pip install open_clip_torch")
         
         super().__init__(model_path, device, **kwargs)
         
         self.pretrained = pretrained
         self.batch_size = batch_size
         
-        # 确定模型名称
+        # Determine the model name
         self.model_name = self._determine_model_name()
         
-        # 模型组件
+        # Model Components
         self.model = None
         self.tokenizer = None
         self.preprocess_fn = None
     
     def _determine_model_name(self) -> str:
-        """确定OpenCLIP模型名称"""
+        """Determine the OpenCLIP model name"""
         path_str = str(self.model_path)
         
-        # 如果是文件路径，从文件名推断
+        # If it is a file path, infer from the filename.
         if self.model_path.is_file():
             return path_str
         
-        # OpenCLIP模型名称映射
+        # OpenCLIP Model Name Mapping
         name_mappings = {
             'vit-b-32': 'ViT-B-32',
             'vit-b-16': 'ViT-B-16',
@@ -87,41 +87,41 @@ class OpenCLIPAdapter(MultimodalAdapter):
             if key in path_lower:
                 return value
         
-        # 如果没有匹配，直接返回路径
+        # If no match is found, return the path directly.
         return path_str
     
     def load_model(self) -> None:
-        """加载OpenCLIP模型"""
+        """Load OpenCLIP model"""
         try:
-            logger.info(f"加载OpenCLIP模型: {self.model_name} (预训练: {self.pretrained})")
+            logger.info(f"Load OpenCLIP model: {self.model_name} (Pre-training: {self.pretrained})")
             
-            # 检查模型是否可用
+            # Check if the model is available
             available_models = open_clip.list_models()
             if self.model_name not in available_models:
-                logger.warning(f"模型 {self.model_name} 不在可用列表中，尝试加载...")
+                logger.warning(f"The model {self.model_name} is not in the available list. Attempting to load....")
             
-            # 创建模型和预处理
+            # Model Creation and Preprocessing
             self.model, _, self.preprocess_fn = open_clip.create_model_and_transforms(
                 self.model_name,
                 pretrained=self.pretrained,
                 device=self.device
             )
             
-            # 获取tokenizer
+            # Obtain tokenizer
             self.tokenizer = open_clip.get_tokenizer(self.model_name)
             
-            # 设置为评估模式
+            # Set to evaluation mode
             self.model.eval()
             
             self.is_loaded = True
-            logger.info(f"OpenCLIP模型加载成功: {self.model_name}")
+            logger.info(f"OpenCLIP model loaded successfully: {self.model_name}")
             
         except Exception as e:
-            logger.error(f"OpenCLIP模型加载失败: {e}")
+            logger.error(f"OpenCLIP model loaded failed: {e}")
             
-            # 尝试使用默认模型
+            # Try using the default model
             try:
-                logger.info("尝试使用默认ViT-B-32模型...")
+                logger.info("Try using the default ViT-B-32 model...")
                 self.model, _, self.preprocess_fn = open_clip.create_model_and_transforms(
                     'ViT-B-32',
                     pretrained='openai',
@@ -132,14 +132,14 @@ class OpenCLIPAdapter(MultimodalAdapter):
                 self.model_name = 'ViT-B-32'
                 self.pretrained = 'openai'
                 self.is_loaded = True
-                logger.info("默认模型加载成功")
+                logger.info("Default model loaded successfully")
             except Exception as e2:
-                logger.error(f"默认模型加载也失败: {e2}")
+                logger.error(f"Default model loading also failed.: {e2}")
                 raise e
     
     def preprocess_image(self, image: Union[str, Path, Image.Image, np.ndarray]) -> torch.Tensor:
-        """预处理图像"""
-        # 加载图像
+        """Preprocessed image"""
+        # Load image
         if isinstance(image, (str, Path)):
             img = Image.open(image).convert('RGB')
         elif isinstance(image, Image.Image):
@@ -147,13 +147,13 @@ class OpenCLIPAdapter(MultimodalAdapter):
         elif isinstance(image, np.ndarray):
             img = Image.fromarray(image).convert('RGB')
         else:
-            raise ValueError(f"不支持的图像格式: {type(image)}")
+            raise ValueError(f"Unsupported image formats: {type(image)}")
         
-        # 应用预处理
+        # Apply Preprocessing
         return self.preprocess_fn(img)
     
     def preprocess_text(self, text: Union[str, List[str]]) -> torch.Tensor:
-        """预处理文本"""
+        """Preprocess text"""
         if isinstance(text, str):
             text = [text]
         
@@ -165,21 +165,21 @@ class OpenCLIPAdapter(MultimodalAdapter):
                 mode: str = "similarity",
                 **kwargs) -> Dict[str, Any]:
         """
-        执行多模态推理
+        Perform multimodal inference
         
         Args:
-            image: 输入图像
-            text: 输入文本
-            mode: 推理模式 (similarity, image_embedding, text_embedding, zero_shot)
+            image: Input image
+            text: Input text
+            mode: Inference mode (similarity, image_embedding, text_embedding, zero_shot)
             
         Returns:
-            推理结果字典
+            Inference result dictionary
         """
         if not self.is_loaded:
             self.load_model()
         
         if image is None and text is None:
-            raise ValueError("必须提供图像或文本输入")
+            raise ValueError("Image or text input must be provided.")
         
         try:
             start_time = time.time()
@@ -193,11 +193,11 @@ class OpenCLIPAdapter(MultimodalAdapter):
             elif mode == "zero_shot":
                 result = self._zero_shot_classification(image, text)
             else:
-                raise ValueError(f"不支持的模式: {mode}")
+                raise ValueError(f"Unsupported modes: {mode}")
             
             inference_time = time.time() - start_time
             
-            # 添加元数据
+            # Add metadata
             result['metadata'] = {
                 'inference_time': inference_time,
                 'mode': mode,
@@ -205,44 +205,44 @@ class OpenCLIPAdapter(MultimodalAdapter):
                 'pretrained': self.pretrained
             }
             
-            logger.debug(f"OpenCLIP推理完成 - 模式: {mode}, 耗时: {inference_time:.3f}s")
+            logger.debug(f"OpenCLIP inference completed - Mode: {mode}, Duration: {inference_time:.3f}s")
             return result
             
         except Exception as e:
-            logger.error(f"OpenCLIP预测失败: {e}")
+            logger.error(f"OpenCLIP prediction failed: {e}")
             raise
     
     def _compute_similarity(self, 
                            image: Union[str, Path, Image.Image, np.ndarray],
                            text: Union[str, List[str]]) -> Dict[str, Any]:
-        """计算图像和文本之间的相似度"""
+        """Calculate the similarity between images and text"""
         if image is None or text is None:
-            raise ValueError("相似度计算需要同时提供图像和文本")
+            raise ValueError("Similarity calculations require both images and text to be provided simultaneously.")
         
-        # 预处理
+        # Pre-process
         image_tensor = self.preprocess_image(image).unsqueeze(0).to(self.device)
         text_tensor = self.preprocess_text(text).to(self.device)
         
         with torch.no_grad():
-            # 编码
+            # Encode
             image_features = self.model.encode_image(image_tensor)
             text_features = self.model.encode_text(text_tensor)
             
-            # 归一化
+            # Normalization
             image_features = F.normalize(image_features, dim=-1)
             text_features = F.normalize(text_features, dim=-1)
             
-            # 计算相似度
+            # Calculate similarity
             similarity = torch.matmul(image_features, text_features.T)
             
-            # 转换为numpy
+            # Convert to numpy
             similarity_scores = similarity.cpu().numpy()
         
-        # 处理文本列表
+        # Processing Text Lists
         if isinstance(text, str):
             text = [text]
         
-        # 构建结果
+        # Construction Results
         results = []
         for i, txt in enumerate(text):
             results.append({
@@ -257,18 +257,18 @@ class OpenCLIPAdapter(MultimodalAdapter):
         }
     
     def _encode_image(self, image: Union[str, Path, Image.Image, np.ndarray]) -> Dict[str, Any]:
-        """编码图像为向量"""
+        """Encode images as vectors"""
         if image is None:
-            raise ValueError("图像编码需要提供图像输入")
+            raise ValueError("Image encoding requires image input.")
         
-        # 预处理
+        # Preprocessing
         image_tensor = self.preprocess_image(image).unsqueeze(0).to(self.device)
         
         with torch.no_grad():
             image_features = self.model.encode_image(image_tensor)
             image_features = F.normalize(image_features, dim=-1)
             
-            # 转换为numpy
+            # Convert to numpy
             embedding = image_features.cpu().numpy()
         
         return {
@@ -278,21 +278,21 @@ class OpenCLIPAdapter(MultimodalAdapter):
         }
     
     def _encode_text(self, text: Union[str, List[str]]) -> Dict[str, Any]:
-        """编码文本为向量"""
+        """Encode text as vectors"""
         if text is None:
-            raise ValueError("文本编码需要提供文本输入")
+            raise ValueError("Text encoding requires text input.")
         
-        # 预处理
+        # Preprocessing
         text_tensor = self.preprocess_text(text).to(self.device)
         
         with torch.no_grad():
             text_features = self.model.encode_text(text_tensor)
             text_features = F.normalize(text_features, dim=-1)
             
-            # 转换为numpy
+            # Convert to numpy
             embeddings = text_features.cpu().numpy()
         
-        # 处理单个文本和文本列表
+        # Processing individual texts and lists of texts
         if isinstance(text, str):
             return {
                 'embedding': embeddings.squeeze(),
@@ -312,22 +312,22 @@ class OpenCLIPAdapter(MultimodalAdapter):
     def _zero_shot_classification(self, 
                                  image: Union[str, Path, Image.Image, np.ndarray],
                                  class_names: List[str]) -> Dict[str, Any]:
-        """零样本图像分类"""
+        """Zero-shot Image Classification"""
         if image is None or not class_names:
-            raise ValueError("零样本分类需要提供图像和类别名称")
+            raise ValueError("Zero-shot classification requires the provision of images and category names.")
         
-        # 构建文本提示
+        # Build Text Prompts
         text_prompts = [f"a photo of a {class_name}" for class_name in class_names]
         
-        # 计算相似度
+        # Calculate similarity
         similarity_result = self._compute_similarity(image, text_prompts)
         
-        # 应用softmax获得概率
+        # Apply softmax to obtain probabilities
         similarities = [item['similarity'] for item in similarity_result['similarities']]
         similarities_tensor = torch.tensor(similarities)
         probabilities = F.softmax(similarities_tensor, dim=0).numpy()
         
-        # 构建分类结果
+        # Construct classification results
         predictions = []
         for i, (class_name, prob) in enumerate(zip(class_names, probabilities)):
             predictions.append({
@@ -337,7 +337,7 @@ class OpenCLIPAdapter(MultimodalAdapter):
                 'similarity': similarities[i]
             })
         
-        # 按置信度排序
+        # Sort by confidence level
         predictions.sort(key=lambda x: x['confidence'], reverse=True)
         
         return {
@@ -348,7 +348,7 @@ class OpenCLIPAdapter(MultimodalAdapter):
         }
     
     def get_model_info(self) -> Dict[str, Any]:
-        """获取模型详细信息"""
+        """Get model details"""
         info = super().get_model_info()
         
         info.update({
@@ -363,29 +363,29 @@ class OpenCLIPAdapter(MultimodalAdapter):
         
         if self.is_loaded:
             try:
-                # 获取可用模型列表
+                # Retrieve the list of available models
                 available_models = open_clip.list_models()
-                info['available_models'] = available_models[:10]  # 只显示前10个
+                info['available_models'] = available_models[:10]  # Show only the first 10
                 
-                # 获取预训练数据集
+                # Acquire pre-trained datasets
                 available_pretrained = open_clip.list_pretrained(self.model_name)
-                info['available_pretrained'] = list(available_pretrained.keys())[:5]  # 只显示前5个
+                info['available_pretrained'] = list(available_pretrained.keys())[:5]  # Show only the first 5
                 
             except Exception as e:
-                logger.debug(f"获取OpenCLIP模型详细信息失败: {e}")
+                logger.debug(f"Failed to retrieve detailed information about the OpenCLIP model: {e}")
         
         return info
     
     def list_available_models(self) -> List[str]:
-        """列出所有可用的OpenCLIP模型"""
+        """List all available OpenCLIP models"""
         try:
             return open_clip.list_models()
         except Exception as e:
-            logger.error(f"获取可用模型列表失败: {e}")
+            logger.error(f"Failed to retrieve the list of available models: {e}")
             return []
     
     def list_pretrained_for_model(self, model_name: str = None) -> Dict[str, Any]:
-        """列出特定模型的预训练权重"""
+        """List the pre-trained weights for a specific model"""
         if model_name is None:
             model_name = self.model_name
         
@@ -393,15 +393,15 @@ class OpenCLIPAdapter(MultimodalAdapter):
             pretrained_info = open_clip.list_pretrained(model_name)
             return pretrained_info
         except Exception as e:
-            logger.error(f"获取预训练权重信息失败: {e}")
+            logger.error(f"Failed to retrieve pre-trained weight information: {e}")
             return {}
     
     def warmup(self, num_runs: int = 3) -> Dict[str, float]:
-        """模型预热"""
+        """Model warmup"""
         if not self.is_loaded:
             self.load_model()
         
-        # 创建dummy输入进行预热
+        # Create dummy input to warm up
         dummy_image = Image.new('RGB', (224, 224), color='blue')
         dummy_text = "a test image for warmup"
         
@@ -413,14 +413,14 @@ class OpenCLIPAdapter(MultimodalAdapter):
                 warmup_time = time.time() - start_time
                 warmup_times.append(warmup_time)
             except Exception as e:
-                logger.warning(f"预热运行 {i+1} 失败: {e}")
+                logger.warning(f"Warmup operation {i+1} failed: {e}")
         
         if warmup_times:
             avg_time = np.mean(warmup_times)
             min_time = np.min(warmup_times)
             max_time = np.max(warmup_times)
             
-            logger.info(f"OpenCLIP模型预热完成 - 平均耗时: {avg_time:.3f}s")
+            logger.info(f"OpenCLIP model warmup completed - Average duration: {avg_time:.3f}s")
             
             return {
                 "warmup_runs": len(warmup_times),
@@ -432,7 +432,7 @@ class OpenCLIPAdapter(MultimodalAdapter):
         return super().warmup(num_runs)
     
     def unload_model(self) -> None:
-        """卸载模型释放内存"""
+        """Unload model to free up memory"""
         if self.model is not None:
             del self.model
             self.model = None
@@ -444,8 +444,8 @@ class OpenCLIPAdapter(MultimodalAdapter):
         self.preprocess_fn = None
         self.is_loaded = False
         
-        # 清理GPU缓存
+        # Clear GPU cache
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             
-        logger.info("OpenCLIP模型已卸载")
+        logger.info("OpenCLIP model has been unloaded")
