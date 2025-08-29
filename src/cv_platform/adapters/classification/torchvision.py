@@ -1,7 +1,7 @@
 """
-Torchvision 分类适配器 - 支持torchvision的预训练分类模型
+Torchvision Classification Adapter - Supports pre-trained classification models from torchvision
 
-支持的模型：
+Supported models:
 - ResNet: resnet18, resnet34, resnet50, resnet101, resnet152
 - EfficientNet: efficientnet_b0-b7
 - DenseNet: densenet121, densenet169, densenet201
@@ -27,31 +27,31 @@ try:
     TORCHVISION_AVAILABLE = True
 except ImportError:
     TORCHVISION_AVAILABLE = False
-    logger.warning("torchvision未安装，Torchvision适配器将不可用")
+    logger.warning("torchvision is not installed; torchvision adapters will be unavailable.")
 
 
 class TorchvisionAdapter(ClassificationAdapter):
-    """Torchvision分类模型适配器"""
+    """Torchvision Classification Model Adapter"""
     
     def __init__(self, 
                  model_path: Union[str, Path],
                  device: str = "auto",
                  pretrained: bool = True,
-                 num_classes: int = 1000,  # ImageNet类别数
+                 num_classes: int = 1000,  # Number of ImageNet Categories
                  batch_size: int = 8,
                  **kwargs):
         """
-        初始化Torchvision适配器
+        Initialize Torchvision Adapter
         
         Args:
-            model_path: 模型文件路径或torchvision://model_name
-            device: 计算设备
-            pretrained: 是否使用预训练权重
-            num_classes: 类别数（1000为ImageNet）
-            batch_size: 批处理大小
+            model_path: Model file path or `torchvision://model_name`
+            device: Computing device
+            pretrained: Whether to use pretrained weights
+            num_classes: Number of classes (1000 for ImageNet)
+            batch_size: Batch size
         """
         if not TORCHVISION_AVAILABLE:
-            raise ImportError("需要安装torchvision: pip install torchvision")
+            raise ImportError("Require install torchvision: pip install torchvision")
         
         super().__init__(model_path, device, **kwargs)
         
@@ -59,10 +59,10 @@ class TorchvisionAdapter(ClassificationAdapter):
         self.num_classes = num_classes
         self.batch_size = batch_size
         
-        # 确定模型架构
+        # Define the model architecture
         self.model_name = self._determine_model_name()
         
-        # 数据预处理
+        # Data Preprocessing
         self.transform = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -71,21 +71,21 @@ class TorchvisionAdapter(ClassificationAdapter):
                                std=[0.229, 0.224, 0.225])
         ])
         
-        # ImageNet类别名称（前10个作为示例）
+        # ImageNet Class Names (Top 10 Examples)
         self.class_names = self._load_class_names()
     
     def _determine_model_name(self) -> str:
-        """根据路径确定模型名称"""
+        """Determine the model name based on the path"""
         path_str = str(self.model_path).lower()
         
-        # 处理torchvision://格式
+        # Process torchvision:// format
         if path_str.startswith('torchvision://'):
             return path_str.replace('torchvision://', '')
         
-        # 从文件名推断
+        # Inferring from the filename
         filename = self.model_path.name.lower()
         
-        # ResNet系列
+        # ResNet Series
         if 'resnet18' in filename:
             return 'resnet18'
         elif 'resnet34' in filename:
@@ -97,7 +97,7 @@ class TorchvisionAdapter(ClassificationAdapter):
         elif 'resnet152' in filename:
             return 'resnet152'
         
-        # EfficientNet系列
+        # EfficientNet Series
         elif 'efficientnet_b0' in filename:
             return 'efficientnet_b0'
         elif 'efficientnet_b1' in filename:
@@ -115,7 +115,7 @@ class TorchvisionAdapter(ClassificationAdapter):
         elif 'efficientnet_b7' in filename:
             return 'efficientnet_b7'
         
-        # MobileNet系列
+        # MobileNet Series
         elif 'mobilenet_v2' in filename:
             return 'mobilenet_v2'
         elif 'mobilenet_v3_large' in filename:
@@ -133,14 +133,14 @@ class TorchvisionAdapter(ClassificationAdapter):
         elif 'vit_l_32' in filename:
             return 'vit_l_32'
         
-        # 默认使用ResNet-50
-        logger.warning(f"无法从文件名确定模型架构: {filename}，默认使用resnet50")
+        # Default use of ResNet-50
+        logger.warning(f"Unable to determine model architecture from filename: {filename}. Using ResNet50 by default.")
         return 'resnet50'
     
     def _load_class_names(self) -> List[str]:
-        """加载类别名称"""
-        # 这里只提供前20个ImageNet类别作为示例
-        # 实际应用中可以从文件或API加载完整的1000个类别
+        """Load Class Name"""
+        # Only the first 20 ImageNet categories are provided here as examples
+        # In practical applications, the full set of 1000 categories can be loaded from a file or via an API
         imagenet_classes = [
             'tench', 'goldfish', 'great_white_shark', 'tiger_shark', 'hammerhead',
             'electric_ray', 'stingray', 'cock', 'hen', 'ostrich',
@@ -148,27 +148,27 @@ class TorchvisionAdapter(ClassificationAdapter):
             'robin', 'bulbul', 'jay', 'magpie', 'chickadee'
         ]
         
-        # 如果类别数不是1000，生成通用类别名
+        # If the number of categories is not 1000, generate a generic category name
         if self.num_classes != 1000:
             return [f'class_{i}' for i in range(self.num_classes)]
         
-        # 扩展到1000个类别（实际应用中应该加载完整列表）
+        # Expand to 1000 categories (the full list should be loaded in practical applications)
         while len(imagenet_classes) < 1000:
             imagenet_classes.append(f'class_{len(imagenet_classes)}')
         
         return imagenet_classes[:self.num_classes]
     
     def load_model(self) -> None:
-        """加载分类模型"""
+        """Load classification model"""
         try:
-            logger.info(f"加载Torchvision分类模型: {self.model_name}")
+            logger.info(f"Load Torchvision classification model: {self.model_name}")
             
-            # 首先尝试直接加载用户的模型文件
+            # First, attempt to load the user's model file directly
             if self.model_path.exists() and not str(self.model_path).startswith('torchvision://'):
-                logger.info("检测到本地模型文件，尝试直接加载...")
+                logger.info("Local model file detected; attempting to load directly...")
                 
                 try:
-                    # 直接加载完整模型
+                    # Directly load the complete model
                     checkpoint = torch.load(self.model_path, map_location=self.device)
                     
                     if hasattr(checkpoint, 'state_dict') or not isinstance(checkpoint, dict):
@@ -177,44 +177,44 @@ class TorchvisionAdapter(ClassificationAdapter):
                             self.model = self.model.to(self.device)
                         self.model.eval()
                         self.is_loaded = True
-                        logger.info("成功直接加载完整模型")
+                        logger.info("Directly load the complete model successfully")
                         return
                 except Exception as e:
-                    logger.info(f"直接加载失败，尝试使用torchvision架构: {e}")
+                    logger.info(f"Direct loading failed. Attempting to use torchvision architecture: {e}")
             
-            # 使用torchvision架构创建模型
-            logger.info(f"使用torchvision架构创建模型: {self.model_name}")
+            # Create a model using the torchvision architecture
+            logger.info(f"Create a model using the torchvision architecture: {self.model_name}")
             
-            # 获取模型构造函数
+            # Obtain the model constructor
             model_func = self._get_model_function()
             
             if model_func is None:
-                raise ValueError(f"不支持的模型: {self.model_name}")
+                raise ValueError(f"Unsupported models: {self.model_name}")
             
-            # 创建模型
+            # Create model
             if self.pretrained and self.num_classes == 1000:
-                # 使用预训练权重
-                weights = 'DEFAULT'  # torchvision新版本的写法
+                # Use pre-trained weights
+                weights = 'DEFAULT'  # The syntax for the new version of torchvision
                 try:
                     self.model = model_func(weights=weights)
                 except TypeError:
-                    # 兼容旧版本torchvision
+                    # Compatible with older versions of torchvision
                     self.model = model_func(pretrained=True)
-                logger.info("使用预训练权重创建模型")
+                logger.info("Create a model using pre-trained weights")
             else:
-                # 不使用预训练或自定义类别数
+                # No pre-training or custom category counts
                 try:
                     self.model = model_func(weights=None, num_classes=self.num_classes)
                 except TypeError:
                     self.model = model_func(pretrained=False, num_classes=self.num_classes)
-                logger.info("创建随机初始化模型")
+                logger.info("Create a Random Initialization Model")
             
-            # 加载用户的权重文件（如果存在）
+            # Load the user's weight file (if available)
             if self.model_path.exists() and not str(self.model_path).startswith('torchvision://'):
-                logger.info("加载用户权重文件...")
+                logger.info("Load user weight file...")
                 checkpoint = torch.load(self.model_path, map_location=self.device)
                 
-                # 处理不同的检查点格式
+                # Handle different checkpoint formats
                 if isinstance(checkpoint, dict):
                     if 'model' in checkpoint:
                         state_dict = checkpoint['model']
@@ -227,39 +227,39 @@ class TorchvisionAdapter(ClassificationAdapter):
                 
                 try:
                     self.model.load_state_dict(state_dict, strict=True)
-                    logger.info("成功加载用户权重（严格模式）")
+                    logger.info("User weight successfully loaded (strict mode)")
                 except RuntimeError as e:
-                    logger.warning(f"严格模式加载失败，尝试非严格模式: {e}")
+                    logger.warning(f"Strict mode loading failed. Attempting non-strict mode: {e}")
                     try:
                         self.model.load_state_dict(state_dict, strict=False)
-                        logger.info("成功加载用户权重（非严格模式）")
+                        logger.info("User weights successfully loaded (non-strict mode)")
                     except RuntimeError as e:
-                        logger.error(f"权重加载失败: {e}")
+                        logger.error(f"Weight loading failed: {e}")
                         if not self.pretrained:
-                            logger.info("使用随机初始化的权重")
+                            logger.info("Weights initialized randomly")
             
-            # 移动到指定设备
+            # Move to specified device
             self.model = self.model.to(self.device)
             self.model.eval()
             
             self.is_loaded = True
-            logger.info(f"Torchvision分类模型加载成功 - 架构: {self.model_name}")
+            logger.info(f"TorchvisionClassification model loaded successfully - Architecture: {self.model_name}")
             
         except Exception as e:
-            logger.error(f"Torchvision分类模型加载失败: {e}")
+            logger.error(f"TorchvisionClassification model loaded failed: {e}")
             raise
     
     def _get_model_function(self):
-        """获取模型构造函数"""
+        """Obtain the model constructor"""
         model_functions = {
-            # ResNet系列
+            # ResNet Series
             'resnet18': models.resnet18,
             'resnet34': models.resnet34,
             'resnet50': models.resnet50,
             'resnet101': models.resnet101,
             'resnet152': models.resnet152,
             
-            # EfficientNet系列
+            # EfficientNet Series
             'efficientnet_b0': models.efficientnet_b0,
             'efficientnet_b1': models.efficientnet_b1,
             'efficientnet_b2': models.efficientnet_b2,
@@ -269,52 +269,52 @@ class TorchvisionAdapter(ClassificationAdapter):
             'efficientnet_b6': models.efficientnet_b6,
             'efficientnet_b7': models.efficientnet_b7,
             
-            # MobileNet系列
+            # MobileNet Series
             'mobilenet_v2': models.mobilenet_v2,
             'mobilenet_v3_large': models.mobilenet_v3_large,
             'mobilenet_v3_small': models.mobilenet_v3_small,
             
-            # DenseNet系列
+            # DenseNet Series
             'densenet121': models.densenet121,
             'densenet169': models.densenet169,
             'densenet201': models.densenet201,
             
-            # VGG系列
+            # VGG Series
             'vgg11': models.vgg11,
             'vgg13': models.vgg13,
             'vgg16': models.vgg16,
             'vgg19': models.vgg19,
         }
         
-        # Vision Transformer需要特殊处理
+        # Vision Transformer requires special handling
         if 'vit_' in self.model_name:
             if hasattr(models, self.model_name):
                 return getattr(models, self.model_name)
             else:
-                logger.warning(f"当前torchvision版本不支持 {self.model_name}")
+                logger.warning(f"Current version of torchvision does not support this: {self.model_name}")
                 return None
         
         return model_functions.get(self.model_name)
     
     def preprocess(self, input_data: Any) -> torch.Tensor:
-        """预处理输入数据"""
+        """Preprocess input data"""
         if isinstance(input_data, (str, Path)):
-            # 文件路径
+            # File path
             image = Image.open(input_data).convert('RGB')
         elif isinstance(input_data, Image.Image):
-            # PIL图像
+            # PIL image
             image = input_data.convert('RGB')
         elif isinstance(input_data, np.ndarray):
-            # numpy数组
+            # numpy array
             if input_data.ndim == 3 and input_data.shape[2] == 3:
                 image = Image.fromarray(input_data)
             else:
-                raise ValueError(f"不支持的numpy数组格式: {input_data.shape}")
+                raise ValueError(f"Unsupported numpy array formats: {input_data.shape}")
         else:
-            raise ValueError(f"不支持的输入格式: {type(input_data)}")
+            raise ValueError(f"Unsupported input formats: {type(input_data)}")
         
-        # 应用预处理变换
-        tensor = self.transform(image).unsqueeze(0)  # 添加batch维度
+        # Apply preprocessing transformation
+        tensor = self.transform(image).unsqueeze(0)  # Add batch dimension
         return tensor.to(self.device)
     
     def predict(self, 
@@ -323,24 +323,24 @@ class TorchvisionAdapter(ClassificationAdapter):
                 threshold: float = 0.0,
                 **kwargs) -> Dict[str, Any]:
         """
-        执行图像分类
+        Perform image classification
         
         Args:
-            image: 输入图像
-            top_k: 返回前k个预测结果
-            threshold: 置信度阈值
+            image: Input image
+            top_k: Return the top k prediction results
+            threshold: Confidence threshold
             
         Returns:
-            分类结果字典
+            Classification results dictionary
         """
         if not self.is_loaded:
             self.load_model()
         
         try:
-            # 预处理输入
+            # Preprocessed input
             input_tensor = self.preprocess(image)
             
-            # 执行推理
+            # Execute Inference
             start_time = time.time()
             with torch.no_grad():
                 logits = self.model(input_tensor)
@@ -348,7 +348,7 @@ class TorchvisionAdapter(ClassificationAdapter):
                 
             inference_time = time.time() - start_time
             
-            # 后处理结果
+            # Post-processing results
             processed_results = self.postprocess(
                 probabilities, 
                 top_k=top_k,
@@ -356,11 +356,11 @@ class TorchvisionAdapter(ClassificationAdapter):
                 inference_time=inference_time
             )
             
-            logger.debug(f"Torchvision分类完成 - 耗时: {inference_time:.3f}s")
+            logger.debug(f"Torchvision Classification Completed - Duration: {inference_time:.3f}s")
             return processed_results
             
         except Exception as e:
-            logger.error(f"Torchvision分类预测失败: {e}")
+            logger.error(f"Torchvision classification prediction failed: {e}")
             raise
     
     def postprocess(self, 
@@ -368,16 +368,16 @@ class TorchvisionAdapter(ClassificationAdapter):
                    top_k: int = 5,
                    threshold: float = 0.0,
                    **kwargs) -> Dict[str, Any]:
-        """后处理分类输出"""
+        """Post-processing classification output"""
         try:
-            # 移到CPU并转换为numpy
+            # Move to CPU and convert to numpy
             probs = probabilities.squeeze(0).cpu().numpy()  # [num_classes]
             
-            # 获取top-k结果
+            # Retrieve the top-k results
             top_k = min(top_k, len(probs))
             top_indices = np.argsort(probs)[::-1][:top_k]
             
-            # 构建预测结果
+            # Construct prediction results
             predictions = []
             for idx in top_indices:
                 confidence = float(probs[idx])
@@ -389,7 +389,7 @@ class TorchvisionAdapter(ClassificationAdapter):
                         'confidence': confidence
                     })
             
-            # 构建结果字典
+            # Build result dictionary
             result = {
                 'predictions': predictions,
                 'top_class': predictions[0]['class'] if predictions else 'unknown',
@@ -406,7 +406,7 @@ class TorchvisionAdapter(ClassificationAdapter):
             return result
             
         except Exception as e:
-            logger.error(f"Torchvision分类后处理失败: {e}")
+            logger.error(f"Torchvision classification post-processing failed: {e}")
             raise
     
     def predict_batch(self, 
@@ -414,26 +414,26 @@ class TorchvisionAdapter(ClassificationAdapter):
                      top_k: int = 5,
                      threshold: float = 0.0,
                      **kwargs) -> List[Dict[str, Any]]:
-        """批量预测"""
+        """Batch Prediction"""
         if not self.is_loaded:
             self.load_model()
         
         results = []
         
-        # 批量处理
+        # Batch processing
         for i in range(0, len(images), self.batch_size):
             batch_images = images[i:i + self.batch_size]
             
             try:
-                # 预处理批量数据
+                # Preprocess batch data
                 batch_tensors = []
                 for img in batch_images:
                     tensor = self.preprocess(img)
-                    batch_tensors.append(tensor.squeeze(0))  # 移除batch维度
+                    batch_tensors.append(tensor.squeeze(0))  # Remove batch dimension
                 
                 batch_tensor = torch.stack(batch_tensors).to(self.device)
                 
-                # 批量推理
+                # Batch Inference
                 start_time = time.time()
                 with torch.no_grad():
                     logits = self.model(batch_tensor)
@@ -441,7 +441,7 @@ class TorchvisionAdapter(ClassificationAdapter):
                 
                 inference_time = time.time() - start_time
                 
-                # 处理每个结果
+                # Process each result
                 for j, probs in enumerate(probabilities):
                     result = self.postprocess(
                         probs.unsqueeze(0),
@@ -452,8 +452,8 @@ class TorchvisionAdapter(ClassificationAdapter):
                     results.append(result)
                     
             except Exception as e:
-                logger.error(f"批量预测失败 (batch {i//self.batch_size + 1}): {e}")
-                # 添加错误结果以保持列表长度一致
+                logger.error(f"Batch prediction failed (batch {i//self.batch_size + 1}): {e}")
+                # Add incorrect results to maintain consistent list length
                 for _ in batch_images:
                     results.append({
                         'predictions': [],
@@ -465,7 +465,7 @@ class TorchvisionAdapter(ClassificationAdapter):
         return results
     
     def get_model_info(self) -> Dict[str, Any]:
-        """获取模型详细信息"""
+        """Get model details"""
         info = super().get_model_info()
         
         info.update({
@@ -481,7 +481,7 @@ class TorchvisionAdapter(ClassificationAdapter):
         
         if self.is_loaded:
             try:
-                # 获取模型参数数量
+                # Obtain the number of model parameters
                 total_params = sum(p.numel() for p in self.model.parameters())
                 trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
                 
@@ -491,16 +491,16 @@ class TorchvisionAdapter(ClassificationAdapter):
                 })
                 
             except Exception as e:
-                logger.debug(f"获取模型详细信息失败: {e}")
+                logger.debug(f"Failed to retrieve model details: {e}")
         
         return info
     
     def warmup(self, num_runs: int = 3) -> Dict[str, float]:
-        """模型预热"""
+        """Model Warmup"""
         if not self.is_loaded:
             self.load_model()
         
-        # 创建dummy输入进行预热
+        # Create dummy entries for warmup
         dummy_image = torch.randn(1, 3, 224, 224).to(self.device)
         
         warmup_times = []
@@ -512,14 +512,14 @@ class TorchvisionAdapter(ClassificationAdapter):
                 warmup_time = time.time() - start_time
                 warmup_times.append(warmup_time)
             except Exception as e:
-                logger.warning(f"预热运行 {i+1} 失败: {e}")
+                logger.warning(f"Warm-up operation {i+1} failed: {e}")
         
         if warmup_times:
             avg_time = np.mean(warmup_times)
             min_time = np.min(warmup_times)
             max_time = np.max(warmup_times)
             
-            logger.info(f"Torchvision分类模型预热完成 - 平均耗时: {avg_time:.3f}s")
+            logger.info(f"Torchvision Classification Model Preheating Complete - Average Duration: {avg_time:.3f}s")
             
             return {
                 "warmup_runs": len(warmup_times),
