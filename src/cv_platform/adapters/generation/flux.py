@@ -1,10 +1,10 @@
 """
-FLUX 生成适配器 - 支持Black Forest Labs的FLUX模型
+FLUX Generation Adapter - Supports Black Forest Labs' FLUX Models
 
-支持的模型：
+Supported Models:
 - FLUX.1-dev
 - FLUX.1-schnell
-- FLUX.1-pro (通过API)
+- FLUX.1-pro (via API)
 """
 
 import time
@@ -22,11 +22,11 @@ try:
     FLUX_AVAILABLE = True
 except ImportError:
     FLUX_AVAILABLE = False
-    logger.warning("diffusers未安装或版本不支持FLUX，FLUX适配器将不可用")
+    logger.warning("diffusers are either not installed or their version does not support FLUX; the FLUX adapter will be unavailable")
 
 
 class FluxAdapter(GenerationAdapter):
-    """FLUX模型适配器"""
+    """FLUX Model Adapter"""
     
     def __init__(self, 
                  model_path: Union[str, Path],
@@ -36,17 +36,17 @@ class FluxAdapter(GenerationAdapter):
                  cpu_offload: bool = False,
                  **kwargs):
         """
-        初始化FLUX适配器
+        Initialize FLUX adapter
         
         Args:
-            model_path: 模型文件路径或HuggingFace模型ID
-            device: 计算设备
-            variant: 模型精度变体 (fp16, fp32)
-            enable_memory_efficient_attention: 启用内存高效注意力
-            cpu_offload: 启用CPU卸载以节省GPU内存
+            model_path: Model file path or HuggingFace model ID
+            device: Computing device
+            variant: Model precision variant (fp16, fp32)
+            enable_memory_efficient_attention: Enable memory-efficient attention
+            cpu_offload: Enable CPU offloading to conserve GPU memory
         """
         if not FLUX_AVAILABLE:
-            raise ImportError("需要安装支持FLUX的diffusers版本: pip install diffusers>=0.30.0")
+            raise ImportError("Version of diffusers that supports FLUX needs to be installed.: pip install diffusers>=0.30.0")
         
         super().__init__(model_path, device, **kwargs)
         
@@ -54,14 +54,14 @@ class FluxAdapter(GenerationAdapter):
         self.enable_memory_efficient_attention = enable_memory_efficient_attention
         self.cpu_offload = cpu_offload
         
-        # 确定模型类型
+        # Determine model type
         self.model_type = self._determine_model_type()
         
-        # 推理管道
+        # Inference Pipeline
         self.pipeline = None
     
     def _determine_model_type(self) -> str:
-        """确定FLUX模型类型"""
+        """Determine FLUX model type"""
         path_str = str(self.model_path).lower()
         
         if 'schnell' in path_str:
@@ -71,26 +71,26 @@ class FluxAdapter(GenerationAdapter):
         elif 'pro' in path_str:
             return 'flux-pro'
         else:
-            return 'flux-dev'  # 默认为dev版本
+            return 'flux-dev'  # Default to dev version
     
     def load_model(self) -> None:
-        """加载FLUX模型"""
+        """Load FLUX model"""
         try:
-            logger.info(f"加载FLUX模型: {self.model_path} (类型: {self.model_type})")
+            logger.info(f"Load FLUX model: {self.model_path} (Type: {self.model_type})")
             
-            # 准备加载参数
+            # Ready to load parameters
             load_kwargs = {
                 'torch_dtype': torch.float16 if self.variant == 'fp16' and 'cuda' in self.device else torch.float32,
             }
             
-            # 根据模型路径类型选择加载方式
+            # Select loading method based on model path type
             model_path_str = str(self.model_path)
             
-            # 方法1: 如果是HuggingFace模型ID或目录
+            # Method 1: If it is a Hugging Face model ID or directory
             if not self.model_path.exists() or self.model_path.is_dir():
-                logger.info("从HuggingFace或目录加载FLUX模型...")
+                logger.info("Load the FLUX model from HuggingFace or the directory...")
                 
-                # 尝试常见的FLUX模型ID
+                # Try common FLUX model IDs
                 possible_model_ids = [
                     model_path_str,
                     "black-forest-labs/FLUX.1-dev",
@@ -103,84 +103,84 @@ class FluxAdapter(GenerationAdapter):
                             model_id,
                             **load_kwargs
                         )
-                        logger.info(f"成功加载FLUX模型: {model_id}")
+                        logger.info(f"FLUX model loaded successfully: {model_id}")
                         break
                     except Exception as e:
-                        logger.debug(f"尝试加载 {model_id} 失败: {e}")
+                        logger.debug(f"Failed to load {model_id}: {e}")
                         continue
                 else:
-                    raise ValueError("无法加载任何FLUX模型")
+                    raise ValueError("Unable to load any FLUX models")
             
-            # 方法2: 如果是本地文件
+            # Method 2: If local file
             elif self.model_path.is_file():
-                logger.info("从本地文件加载FLUX模型...")
+                logger.info("Load FLUX models from local files...")
                 
                 if model_path_str.endswith('.safetensors'):
-                    # SafeTensors格式 - FLUX通常需要完整的pipeline目录
-                    raise ValueError("FLUX模型需要完整的pipeline目录，不支持单文件加载")
+                    # SafeTensors Format - FLUX typically requires the complete pipeline directory
+                    raise ValueError("FLUX model requires a complete pipeline directory and does not support loading individual files")
                 else:
-                    raise ValueError(f"不支持的FLUX模型文件格式: {self.model_path.suffix}")
+                    raise ValueError(f"Unsupported FLUX model file formats: {self.model_path.suffix}")
             
             else:
-                raise ValueError(f"无效的模型路径: {self.model_path}")
+                raise ValueError(f"Invalid model path: {self.model_path}")
             
-            # 移动到指定设备
+            # Move to specific device
             self.pipeline = self.pipeline.to(self.device)
             
-            # 应用优化
+            # Appy optimizations
             self._apply_optimizations()
             
             self.is_loaded = True
-            logger.info(f"FLUX模型加载成功 - 类型: {self.model_type}")
+            logger.info(f"FLUX model loaded successfully - Type: {self.model_type}")
             
         except Exception as e:
-            logger.error(f"FLUX模型加载失败: {e}")
+            logger.error(f"FLUX model loading failed: {e}")
             raise
     
     def _apply_optimizations(self) -> None:
-        """应用性能优化"""
+        """Application Performance Optimization"""
         try:
-            # 启用内存高效注意力
+            # Enable Memory-Efficient Attention
             if self.enable_memory_efficient_attention:
                 self.pipeline.enable_attention_slicing()
-                logger.info("已启用注意力切片")
+                logger.info("Attention slicing has been enabled.")
             
-            # 启用CPU卸载
+            # Enable CPU Offload
             if self.cpu_offload:
                 try:
                     self.pipeline.enable_model_cpu_offload()
-                    logger.info("已启用CPU卸载")
+                    logger.info("CPU offload enabled")
                 except Exception as e:
-                    logger.warning(f"CPU卸载启用失败: {e}")
+                    logger.warning(f"CPU offload failed: {e}")
                     
         except Exception as e:
-            logger.warning(f"应用优化失败: {e}")
+            logger.warning(f"Application optimization failed: {e}")
     
     def preprocess(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        """预处理生成参数"""
-        # FLUX特定的参数设置
+        """Preprocessing Generate Parameters"""
+        # FLUX-specific parameter settings
         params = {
             'prompt': prompt,
             'num_inference_steps': kwargs.get('num_steps', 50 if self.model_type == 'flux-dev' else 4),
-            'guidance_scale': kwargs.get('guidance_scale', 3.5),  # FLUX使用较低的guidance_scale
-            'width': kwargs.get('width', 1024),  # FLUX默认1024x1024
+            'guidance_scale': kwargs.get('guidance_scale', 3.5),  # FLUX uses a lower guidance_scale
+            'width': kwargs.get('width', 1024),  # FLUX defaults to 1024x1024
             'height': kwargs.get('height', 1024),
             'num_images_per_prompt': kwargs.get('num_images', 1),
             'seed': kwargs.get('seed', None)
         }
         
-        # 验证参数范围
+        # Verify parameter range
         params['num_inference_steps'] = max(1, min(100, params['num_inference_steps']))
         params['guidance_scale'] = max(0.0, min(10.0, params['guidance_scale']))
         params['width'] = max(256, min(2048, params['width']))
         params['height'] = max(256, min(2048, params['height']))
         params['num_images_per_prompt'] = max(1, min(4, params['num_images_per_prompt']))
         
-        # 确保尺寸是16的倍数（FLUX要求）
+        # Ensure the size is a multiple of 16 (FLUX requirement)
         params['width'] = (params['width'] // 16) * 16
         params['height'] = (params['height'] // 16) * 16
         
-        # 设置随机种子
+        # Set random seed
         if params['seed'] is not None:
             generator = torch.Generator(device=self.device).manual_seed(params['seed'])
             params['generator'] = generator
@@ -197,29 +197,29 @@ class FluxAdapter(GenerationAdapter):
                 seed: Optional[int] = None,
                 **kwargs) -> Dict[str, Any]:
         """
-        执行图像生成
+        Execute Image Generation
         
         Args:
-            prompt: 正向提示词
-            num_steps: 推理步数（FLUX-dev默认50，FLUX-schnell默认4）
-            guidance_scale: 引导尺度（FLUX推荐3.5）
-            width: 图像宽度
-            height: 图像高度
-            num_images: 生成图像数量
-            seed: 随机种子
+            prompt: Forward prompt
+            num_steps: Inference steps (FLUX-dev defaults to 50, FLUX-schnell defaults to 4)
+            guidance_scale: Guidance scale (FLUX recommends 3.5)
+            width: Image width
+            height: Image height
+            num_images: Number of images to generate
+            seed: Random seed
             
         Returns:
-            生成结果字典
+            Generated results dictionary
         """
         if not self.is_loaded:
             self.load_model()
         
-        # 根据模型类型设置默认步数
+        # Set default step count based on model type
         if num_steps is None:
             num_steps = 50 if self.model_type == 'flux-dev' else 4
         
         try:
-            # 预处理参数
+            # Preprocessing Parameters
             params = self.preprocess(
                 prompt=prompt,
                 num_steps=num_steps,
@@ -231,13 +231,13 @@ class FluxAdapter(GenerationAdapter):
                 **kwargs
             )
             
-            # 执行生成
+            # Execute Generation
             start_time = time.time()
             
             logger.info(f"开始FLUX生成: {params['width']}x{params['height']}, {params['num_inference_steps']}步")
             
             with torch.no_grad():
-                # 移除我们添加的seed参数，传递generator
+                # Remove the seed parameter we added and pass the generator
                 pipeline_params = params.copy()
                 pipeline_params.pop('seed', None)
                 
@@ -245,33 +245,33 @@ class FluxAdapter(GenerationAdapter):
                 
             inference_time = time.time() - start_time
             
-            # 后处理结果
+            # Post-processing results
             processed_results = self.postprocess(
                 result,
                 params=params,
                 inference_time=inference_time
             )
             
-            logger.info(f"FLUX图像生成完成 - 耗时: {inference_time:.3f}s")
+            logger.info(f"FLUX image generation complete - Duration: {inference_time:.3f}s")
             return processed_results
             
         except Exception as e:
-            logger.error(f"FLUX生成失败: {e}")
+            logger.error(f"FLUX generation failed: {e}")
             raise
     
     def postprocess(self, 
                    pipeline_result: Any,
                    params: Dict[str, Any],
                    **kwargs) -> Dict[str, Any]:
-        """后处理生成结果"""
+        """Post-processing generates results"""
         try:
-            # 获取生成的图像
+            # Retrieve generated image
             images = pipeline_result.images
             
-            # 准备图像信息
+            # Prepare image information
             image_info = []
             for i, image in enumerate(images):
-                # 生成文件名
+                # Generate filename
                 timestamp = int(time.time() * 1000)
                 filename = f"flux_generated_{timestamp}_{i}.png"
                 
@@ -283,7 +283,7 @@ class FluxAdapter(GenerationAdapter):
                     'height': image.height
                 })
             
-            # 构建结果
+            # Construction Results
             result = {
                 'images': images,
                 'image_info': image_info,
@@ -305,22 +305,22 @@ class FluxAdapter(GenerationAdapter):
             return result
             
         except Exception as e:
-            logger.error(f"FLUX后处理失败: {e}")
+            logger.error(f"FLUX post-processing failed: {e}")
             raise
     
     def generate_and_save(self,
                          prompt: str,
                          save_dir: Union[str, Path] = "flux_outputs",
                          **kwargs) -> List[str]:
-        """生成图像并保存到文件"""
-        # 执行生成
+        """Generate an image and save it to a file"""
+        # Execute Generation
         results = self.predict(prompt, **kwargs)
         
-        # 创建保存目录
+        # Create save directory
         save_path = Path(save_dir)
         save_path.mkdir(parents=True, exist_ok=True)
         
-        # 保存图像
+        # Save images
         saved_paths = []
         for image_info in results['image_info']:
             image = image_info['image']
@@ -329,12 +329,12 @@ class FluxAdapter(GenerationAdapter):
             
             image.save(file_path)
             saved_paths.append(str(file_path))
-            logger.info(f"FLUX图像已保存: {file_path}")
+            logger.info(f"FLUX image saved: {file_path}")
         
         return saved_paths
     
     def warmup(self, num_runs: int = 1) -> Dict[str, float]:
-        """模型预热（FLUX预热时间较长，建议少次数）"""
+        """Model Preheating (FLUX has a longer preheating time; fewer iterations are recommended)"""
         if not self.is_loaded:
             self.load_model()
         
@@ -342,25 +342,25 @@ class FluxAdapter(GenerationAdapter):
         for i in range(num_runs):
             start_time = time.time()
             try:
-                # 使用简单提示词和较少步数进行预热
+                # Warm up using simple prompts and fewer steps.
                 _ = self.predict(
                     prompt="a simple test",
-                    num_steps=1,  # 最少步数
-                    width=512,    # 较小尺寸
+                    num_steps=1,  # Minimum number of steps
+                    width=512,    # Smaller size
                     height=512
                 )
                 warmup_time = time.time() - start_time
                 warmup_times.append(warmup_time)
-                logger.info(f"FLUX预热运行 {i+1}/{num_runs} 完成: {warmup_time:.2f}s")
+                logger.info(f"FLUX warmup {i+1}/{num_runs} completed: {warmup_time:.2f}s")
             except Exception as e:
-                logger.warning(f"FLUX预热运行 {i+1} 失败: {e}")
+                logger.warning(f"FLUX warmup operation {i+1} failed: {e}")
         
         if warmup_times:
             avg_time = np.mean(warmup_times)
             min_time = np.min(warmup_times)
             max_time = np.max(warmup_times)
             
-            logger.info(f"FLUX模型预热完成 - 平均耗时: {avg_time:.3f}s")
+            logger.info(f"FLUX model warmup complete - Average Duration: {avg_time:.3f}s")
             
             return {
                 "warmup_runs": len(warmup_times),
@@ -372,7 +372,7 @@ class FluxAdapter(GenerationAdapter):
         return super().warmup(num_runs)
     
     def get_model_info(self) -> Dict[str, Any]:
-        """获取模型详细信息"""
+        """Get model details"""
         info = super().get_model_info()
         
         info.update({
@@ -392,7 +392,7 @@ class FluxAdapter(GenerationAdapter):
         
         if self.is_loaded:
             try:
-                # 获取管道组件信息
+                # Retrieve pipeline component information
                 components = []
                 if hasattr(self.pipeline, 'transformer'):
                     components.append('transformer')
@@ -411,14 +411,14 @@ class FluxAdapter(GenerationAdapter):
                 })
                 
             except Exception as e:
-                logger.debug(f"获取FLUX模型详细信息失败: {e}")
+                logger.debug(f"Failed to retrieve detailed information about FLUX model: {e}")
         
         return info
     
     def unload_model(self) -> None:
-        """卸载模型释放内存"""
+        """Unload model to free up memory."""
         if self.pipeline is not None:
-            # 尝试卸载管道组件
+            # Attempt to uninstall pipeline components
             if hasattr(self.pipeline, 'transformer'):
                 del self.pipeline.transformer
             if hasattr(self.pipeline, 'vae'):
@@ -432,8 +432,8 @@ class FluxAdapter(GenerationAdapter):
             self.pipeline = None
             self.is_loaded = False
             
-            # 清理GPU缓存
+            # Clear GPU cache
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 
-            logger.info("FLUX模型已卸载")
+            logger.info("FLUX model has been unloaded")
