@@ -1,8 +1,8 @@
 """
-OpenAI CLIP 多模态适配器 - 支持原版OpenAI CLIP模型
+OpenAI CLIP Multimodal Adapter -  Supports original OpenAI CLIP model
 
-支持的模型：
-- OpenAI CLIP: ViT-B/32, ViT-B/16, ViT-L/14, ViT-L/14@336px, RN50, RN101等
+Supported Models:
+- OpenAI CLIP: ViT-B/32, ViT-B/16, ViT-L/14, ViT-L/14@336px, RN50, RN101, etc.
 """
 
 import time
@@ -29,11 +29,11 @@ except ImportError:
     TRANSFORMERS_AVAILABLE = False
 
 if not any([CLIP_AVAILABLE, TRANSFORMERS_AVAILABLE]):
-    logger.warning("未安装CLIP相关库，CLIP适配器将不可用")
+    logger.warning("CLIP adapter will be unavailable if the CLIP-related libraries are not installed.")
 
 
 class CLIPAdapter(MultimodalAdapter):
-    """CLIP多模态模型适配器"""
+    """CLIP Multimodal Model Adapter"""
     
     def __init__(self, 
                  model_path: Union[str, Path],
@@ -42,67 +42,67 @@ class CLIPAdapter(MultimodalAdapter):
                  batch_size: int = 32,
                  **kwargs):
         """
-        初始化CLIP适配器
+        Initialize CLIP Adapter
         
         Args:
-            model_path: 模型文件路径或模型名称
-            device: 计算设备
-            model_source: 模型来源 (auto, openai, huggingface)
-            batch_size: 批处理大小
+            model_path: Model name or file path
+            device: Computing device
+            model_source: Pre-trained dataset name (auto, openai, huggingface)
+            batch_size: Batch size
         """
         super().__init__(model_path, device, **kwargs)
         
         self.model_source = model_source
         self.batch_size = batch_size
         
-        # 确定实际使用的模型源
+        # Determine model source
         self.actual_source = self._determine_model_source()
         
-        # 模型组件
+        # Model Components
         self.model = None
         self.processor = None
         self.tokenizer = None
         self.preprocess_fn = None
         
-        # 确定模型名称
+        # Determine model name
         self.model_name = self._determine_model_name()
     
     def _determine_model_source(self) -> str:
-        """确定模型来源"""
+        """Determine model source"""
         if self.model_source != "auto":
             return self.model_source
         
         path_str = str(self.model_path).lower()
         
-        # 检查是否是HuggingFace格式
+        # Check if HuggingFace format
         if (self.model_path.is_dir() and 
             (self.model_path / "config.json").exists()):
             return "huggingface"
         
-        # 检查是否是标准CLIP模型名
+        # Check if standard CLIP model name
         if any(name in path_str for name in ['vit-b', 'vit-l', 'rn50', 'rn101']):
             if CLIP_AVAILABLE:
                 return "openai"
             elif TRANSFORMERS_AVAILABLE:
                 return "huggingface"
         
-        # 默认选择
+        # Default option
         if CLIP_AVAILABLE:
             return "openai"
         elif TRANSFORMERS_AVAILABLE:
             return "huggingface"
         else:
-            raise ImportError("未安装任何CLIP库")
+            raise ImportError("No CLIP libraries are installed.")
     
     def _determine_model_name(self) -> str:
-        """确定模型名称"""
+        """Determine model name"""
         path_str = str(self.model_path)
         
-        # 如果是文件路径，从文件名推断
+        # If it is a file path, infer from the filename.
         if self.model_path.is_file() or not self.model_path.exists():
             return path_str
         
-        # 常见的CLIP模型名称映射
+        # Common CLIP Model Name Mapping
         name_mappings = {
             'vit-b-32': 'ViT-B/32',
             'vit-b-16': 'ViT-B/16', 
@@ -120,84 +120,84 @@ class CLIPAdapter(MultimodalAdapter):
             if key in path_lower:
                 return value
         
-        # 默认返回原始路径
+        # Return original path by default
         return path_str
     
     def load_model(self) -> None:
-        """加载CLIP模型"""
+        """Load CLIP model"""
         try:
-            logger.info(f"加载CLIP模型: {self.model_name} (来源: {self.actual_source})")
+            logger.info(f"Load CLIP model: {self.model_name} (Source: {self.actual_source})")
             
             if self.actual_source == "openai":
                 self._load_openai_clip()
             elif self.actual_source == "huggingface":
                 self._load_huggingface_clip()
             else:
-                raise ValueError(f"不支持的模型来源: {self.actual_source}")
+                raise ValueError(f"Unsupported model sources: {self.actual_source}")
             
-            # 移动到指定设备
+            # Move to the specified device
             if hasattr(self.model, 'to'):
                 self.model = self.model.to(self.device)
             
             self.is_loaded = True
-            logger.info(f"CLIP模型加载成功 - 来源: {self.actual_source}")
+            logger.info(f"CLIP model loaded successfully - Source: {self.actual_source}")
             
         except Exception as e:
-            logger.error(f"CLIP模型加载失败: {e}")
+            logger.error(f"CLIP model loaded failed: {e}")
             raise
     
     def _load_openai_clip(self) -> None:
-        """加载OpenAI CLIP模型"""
+        """Load OpenAI CLIP model"""
         if not CLIP_AVAILABLE:
-            raise ImportError("需要安装clip: pip install git+https://github.com/openai/CLIP.git")
+            raise ImportError("Require install clip: pip install git+https://github.com/openai/CLIP.git")
         
         try:
             self.model, self.preprocess_fn = clip.load(self.model_name, device=self.device)
-            logger.info(f"OpenAI CLIP模型加载成功: {self.model_name}")
+            logger.info(f"OpenAI CLIP model loaded successfully: {self.model_name}")
         except Exception as e:
-            # 尝试本地文件加载
+            # Attempt to load local files
             if self.model_path.exists():
                 checkpoint = torch.load(self.model_path, map_location=self.device)
                 self.model, self.preprocess_fn = clip.load("ViT-B/32", device=self.device)
                 self.model.load_state_dict(checkpoint)
-                logger.info("从本地文件加载OpenAI CLIP模型")
+                logger.info("Load the OpenAI CLIP model from a local file")
             else:
                 raise e
     
     def _load_huggingface_clip(self) -> None:
-        """加载HuggingFace CLIP模型"""
+        """Load HuggingFace CLIP model"""
         if not TRANSFORMERS_AVAILABLE:
-            raise ImportError("需要安装transformers: pip install transformers")
+            raise ImportError("Require install transformers: pip install transformers")
         
         try:
             model_path_str = str(self.model_path)
             
-            # 尝试不同的模型标识符
+            # Try different model identifiers
             possible_names = [
                 model_path_str,
                 f"openai/clip-{self.model_name.lower().replace('/', '-')}",
-                "openai/clip-vit-base-patch32"  # 默认模型
+                "openai/clip-vit-base-patch32"  # Default model
             ]
             
             for name in possible_names:
                 try:
                     self.processor = CLIPProcessor.from_pretrained(name)
                     self.model = CLIPModel.from_pretrained(name)
-                    logger.info(f"HuggingFace CLIP模型加载成功: {name}")
+                    logger.info(f"HuggingFace CLIP model loaded successfully: {name}")
                     break
                 except Exception as e:
-                    logger.debug(f"尝试加载 {name} 失败: {e}")
+                    logger.debug(f"Failed to load {name}: {e}")
                     continue
             else:
-                raise ValueError("无法加载任何HuggingFace CLIP模型")
+                raise ValueError("Unable to load any HuggingFace CLIP models")
                 
         except Exception as e:
-            logger.error(f"HuggingFace CLIP模型加载失败: {e}")
+            logger.error(f"HuggingFace CLIP model loading failed: {e}")
             raise
     
     def preprocess_image(self, image: Union[str, Path, Image.Image, np.ndarray]) -> torch.Tensor:
-        """预处理图像"""
-        # 加载图像
+        """Preprocess image"""
+        # Load images
         if isinstance(image, (str, Path)):
             img = Image.open(image).convert('RGB')
         elif isinstance(image, Image.Image):
@@ -205,30 +205,30 @@ class CLIPAdapter(MultimodalAdapter):
         elif isinstance(image, np.ndarray):
             img = Image.fromarray(image).convert('RGB')
         else:
-            raise ValueError(f"不支持的图像格式: {type(image)}")
+            raise ValueError(f"Unsupported image formats: {type(image)}")
         
-        # 根据模型来源进行预处理
+        # Perform preprocessing based on the model source
         if self.actual_source == "openai":
             return self.preprocess_fn(img)
         elif self.actual_source == "huggingface":
             inputs = self.processor(images=img, return_tensors="pt")
             return inputs['pixel_values'].squeeze(0)
         else:
-            raise ValueError(f"不支持的模型来源: {self.actual_source}")
+            raise ValueError(f"Unsupported model sources: {self.actual_source}")
     
     def preprocess_text(self, text: Union[str, List[str]]) -> torch.Tensor:
-        """预处理文本"""
+        """Preprocess text"""
         if isinstance(text, str):
             text = [text]
         
-        # 根据模型来源进行预处理
+        # Perform preprocessing based on the model source
         if self.actual_source == "openai":
             return clip.tokenize(text)
         elif self.actual_source == "huggingface":
             inputs = self.processor(text=text, return_tensors="pt", padding=True, truncation=True)
             return inputs['input_ids']
         else:
-            raise ValueError(f"不支持的模型来源: {self.actual_source}")
+            raise ValueError(f"Unsupported model sources: {self.actual_source}")
     
     def predict(self,
                 image: Optional[Union[str, Path, Image.Image, np.ndarray]] = None,
@@ -236,21 +236,21 @@ class CLIPAdapter(MultimodalAdapter):
                 mode: str = "similarity",
                 **kwargs) -> Dict[str, Any]:
         """
-        执行多模态推理
+        Perform multimodal inference
         
         Args:
-            image: 输入图像
-            text: 输入文本
-            mode: 推理模式 (similarity, image_embedding, text_embedding, zero_shot)
+            image: Input image
+            text: Input text
+            mode: Inference mode (similarity, image_embedding, text_embedding, zero_shot)
             
         Returns:
-            推理结果字典
+            Inference result dictionary
         """
         if not self.is_loaded:
             self.load_model()
         
         if image is None and text is None:
-            raise ValueError("必须提供图像或文本输入")
+            raise ValueError("Image or text input must be provided.")
         
         try:
             start_time = time.time()
@@ -264,11 +264,11 @@ class CLIPAdapter(MultimodalAdapter):
             elif mode == "zero_shot":
                 result = self._zero_shot_classification(image, text)
             else:
-                raise ValueError(f"不支持的模式: {mode}")
+                raise ValueError(f"Unsupported modes: {mode}")
             
             inference_time = time.time() - start_time
             
-            # 添加元数据
+            # Add metadata
             result['metadata'] = {
                 'inference_time': inference_time,
                 'mode': mode,
@@ -276,35 +276,35 @@ class CLIPAdapter(MultimodalAdapter):
                 'model_name': self.model_name
             }
             
-            logger.debug(f"CLIP推理完成 - 模式: {mode}, 耗时: {inference_time:.3f}s")
+            logger.debug(f"CLIP inference completed - Mode: {mode}, Duration:: {inference_time:.3f}s")
             return result
             
         except Exception as e:
-            logger.error(f"CLIP预测失败: {e}")
+            logger.error(f"CLIP prediction failed: {e}")
             raise
     
     def _compute_similarity(self, 
                            image: Union[str, Path, Image.Image, np.ndarray],
                            text: Union[str, List[str]]) -> Dict[str, Any]:
-        """计算图像和文本之间的相似度"""
+        """Calculate the similarity between images and text"""
         if image is None or text is None:
-            raise ValueError("相似度计算需要同时提供图像和文本")
+            raise ValueError("Similarity calculations require both images and text to be provided simultaneously.")
         
-        # 预处理
+        # Preprocess
         image_tensor = self.preprocess_image(image).unsqueeze(0).to(self.device)
         text_tensor = self.preprocess_text(text).to(self.device)
         
         with torch.no_grad():
             if self.actual_source == "openai":
-                # 编码
+                # Encode
                 image_features = self.model.encode_image(image_tensor)
                 text_features = self.model.encode_text(text_tensor)
                 
-                # 归一化
+                # Normalization
                 image_features = F.normalize(image_features, dim=-1)
                 text_features = F.normalize(text_features, dim=-1)
                 
-                # 计算相似度
+                # Calculate similarity
                 similarity = torch.matmul(image_features, text_features.T)
                 
             elif self.actual_source == "huggingface":
@@ -315,14 +315,14 @@ class CLIPAdapter(MultimodalAdapter):
                 outputs = self.model(**image_inputs, **text_inputs)
                 similarity = outputs.logits_per_image
             
-            # 转换为numpy
+            # Convert to numpy
             similarity_scores = similarity.cpu().numpy()
         
-        # 处理文本列表
+        # Processing Text Lists
         if isinstance(text, str):
             text = [text]
         
-        # 构建结果
+        # Construction Results
         results = []
         for i, txt in enumerate(text):
             results.append({
@@ -337,11 +337,11 @@ class CLIPAdapter(MultimodalAdapter):
         }
     
     def _encode_image(self, image: Union[str, Path, Image.Image, np.ndarray]) -> Dict[str, Any]:
-        """编码图像为向量"""
+        """Encode images as vectors"""
         if image is None:
-            raise ValueError("图像编码需要提供图像输入")
+            raise ValueError("Image encoding requires image input.")
         
-        # 预处理
+        # Preprocess
         image_tensor = self.preprocess_image(image).unsqueeze(0).to(self.device)
         
         with torch.no_grad():
@@ -353,7 +353,7 @@ class CLIPAdapter(MultimodalAdapter):
                 outputs = self.model.get_image_features(**image_inputs)
                 image_features = F.normalize(outputs, dim=-1)
             
-            # 转换为numpy
+            # Convert to numpy
             embedding = image_features.cpu().numpy()
         
         return {
@@ -363,11 +363,11 @@ class CLIPAdapter(MultimodalAdapter):
         }
     
     def _encode_text(self, text: Union[str, List[str]]) -> Dict[str, Any]:
-        """编码文本为向量"""
+        """Encode text as vectors"""
         if text is None:
-            raise ValueError("文本编码需要提供文本输入")
+            raise ValueError("Text encoding requires text input")
         
-        # 预处理
+        # Preprocess
         text_tensor = self.preprocess_text(text).to(self.device)
         
         with torch.no_grad():
@@ -379,10 +379,10 @@ class CLIPAdapter(MultimodalAdapter):
                 outputs = self.model.get_text_features(**text_inputs)
                 text_features = F.normalize(outputs, dim=-1)
             
-            # 转换为numpy
+            # Convert to numpy
             embeddings = text_features.cpu().numpy()
         
-        # 处理单个文本和文本列表
+        # Processing individual texts and lists of texts
         if isinstance(text, str):
             return {
                 'embedding': embeddings.squeeze(),
@@ -402,22 +402,22 @@ class CLIPAdapter(MultimodalAdapter):
     def _zero_shot_classification(self, 
                                  image: Union[str, Path, Image.Image, np.ndarray],
                                  class_names: List[str]) -> Dict[str, Any]:
-        """零样本图像分类"""
+        """Zero-shot Image Classification"""
         if image is None or not class_names:
-            raise ValueError("零样本分类需要提供图像和类别名称")
+            raise ValueError("Zero-shot classification requires the provision of images and category names.")
         
-        # 构建文本提示
+        # Build Text Prompts
         text_prompts = [f"a photo of a {class_name}" for class_name in class_names]
         
-        # 计算相似度
+        # Calculate similarity
         similarity_result = self._compute_similarity(image, text_prompts)
         
-        # 应用softmax获得概率
+        # Apply softmax to obtain probabilities
         similarities = [item['similarity'] for item in similarity_result['similarities']]
         similarities_tensor = torch.tensor(similarities)
         probabilities = F.softmax(similarities_tensor, dim=0).numpy()
         
-        # 构建分类结果
+        # Construct classification results
         predictions = []
         for i, (class_name, prob) in enumerate(zip(class_names, probabilities)):
             predictions.append({
@@ -427,7 +427,7 @@ class CLIPAdapter(MultimodalAdapter):
                 'similarity': similarities[i]
             })
         
-        # 按置信度排序
+        # Sort by confidence level
         predictions.sort(key=lambda x: x['confidence'], reverse=True)
         
         return {
@@ -442,32 +442,32 @@ class CLIPAdapter(MultimodalAdapter):
                      texts: Optional[List[str]] = None,
                      mode: str = "similarity",
                      **kwargs) -> List[Dict[str, Any]]:
-        """批量预测"""
+        """Batch Prediction"""
         if not self.is_loaded:
             self.load_model()
         
         results = []
         
         if mode == "similarity" and images and texts:
-            # 图像-文本相似度批量计算
+            # Batch Image-Text Similarity Calculation
             for image in images:
                 result = self.predict(image=image, text=texts, mode=mode, **kwargs)
                 results.append(result)
         
         elif mode == "image_embedding" and images:
-            # 批量图像编码
+            # Batch Image Encoding
             for image in images:
                 result = self.predict(image=image, mode=mode, **kwargs)
                 results.append(result)
         
         elif mode == "text_embedding" and texts:
-            # 批量文本编码
+            # Batch Text Encoding
             for text in texts:
                 result = self.predict(text=text, mode=mode, **kwargs)
                 results.append(result)
         
         else:
-            raise ValueError("批量预测的输入与模式不匹配")
+            raise ValueError("Batch prediction input does not match the pattern")
         
         return results
     
@@ -475,26 +475,26 @@ class CLIPAdapter(MultimodalAdapter):
                            query_image: Union[str, Path, Image.Image, np.ndarray],
                            candidate_images: List[Union[str, Path, Image.Image, np.ndarray]],
                            top_k: int = 5) -> Dict[str, Any]:
-        """查找相似图像"""
-        # 编码查询图像
+        """Find similar images"""
+        # Encoding Query Image
         query_result = self.predict(image=query_image, mode="image_embedding")
         query_embedding = query_result['embedding']
         
-        # 编码候选图像
+        # Encoding Candidate Images
         candidate_embeddings = []
         for img in candidate_images:
             result = self.predict(image=img, mode="image_embedding")
             candidate_embeddings.append(result['embedding'])
         
-        # 计算相似度
+        # Calculate similarity
         candidate_embeddings = np.stack(candidate_embeddings)
         similarities = np.dot(candidate_embeddings, query_embedding)
         
-        # 获取top-k
+        # Get top-k
         top_k = min(top_k, len(candidate_images))
         top_indices = np.argsort(similarities)[::-1][:top_k]
         
-        # 构建结果
+        # Construct Results
         similar_images = []
         for idx in top_indices:
             similar_images.append({
@@ -513,26 +513,26 @@ class CLIPAdapter(MultimodalAdapter):
                         text_query: str,
                         candidate_images: List[Union[str, Path, Image.Image, np.ndarray]],
                         top_k: int = 5) -> Dict[str, Any]:
-        """使用文本搜索图像"""
-        # 编码文本查询
+        """Search images using text"""
+        # Encoded Text Query
         text_result = self.predict(text=text_query, mode="text_embedding")
         text_embedding = text_result['embedding']
         
-        # 编码候选图像
+        # Encoding Candidate Images
         image_embeddings = []
         for img in candidate_images:
             result = self.predict(image=img, mode="image_embedding")
             image_embeddings.append(result['embedding'])
         
-        # 计算相似度
+        # Calculate similarity
         image_embeddings = np.stack(image_embeddings)
         similarities = np.dot(image_embeddings, text_embedding)
         
-        # 获取top-k
+        # Get top-k
         top_k = min(top_k, len(candidate_images))
         top_indices = np.argsort(similarities)[::-1][:top_k]
         
-        # 构建结果
+        # Construct Results
         matching_images = []
         for idx in top_indices:
             matching_images.append({
@@ -549,7 +549,7 @@ class CLIPAdapter(MultimodalAdapter):
         }
     
     def get_model_info(self) -> Dict[str, Any]:
-        """获取模型详细信息"""
+        """Get model details"""
         info = super().get_model_info()
         
         info.update({
@@ -563,7 +563,7 @@ class CLIPAdapter(MultimodalAdapter):
         
         if self.is_loaded:
             try:
-                # 获取嵌入维度
+                # Obtain Embedding Dimensions
                 if self.actual_source == "openai":
                     if hasattr(self.model, 'visual') and hasattr(self.model.visual, 'output_dim'):
                         info['embedding_dim'] = self.model.visual.output_dim
@@ -572,7 +572,7 @@ class CLIPAdapter(MultimodalAdapter):
                 elif self.actual_source == "huggingface":
                     info['embedding_dim'] = self.model.config.projection_dim
                 
-                # 获取输入分辨率
+                # Retrieve input resolution
                 if self.actual_source == "openai":
                     if hasattr(self.model, 'visual') and hasattr(self.model.visual, 'input_resolution'):
                         info['input_resolution'] = self.model.visual.input_resolution
@@ -580,16 +580,16 @@ class CLIPAdapter(MultimodalAdapter):
                     info['input_resolution'] = self.model.config.vision_config.image_size
                 
             except Exception as e:
-                logger.debug(f"获取CLIP模型详细信息失败: {e}")
+                logger.debug(f"Failed to retrieve detailed information about the CLIP model: {e}")
         
         return info
     
     def warmup(self, num_runs: int = 3) -> Dict[str, float]:
-        """模型预热"""
+        """Model Warmup"""
         if not self.is_loaded:
             self.load_model()
         
-        # 创建dummy输入进行预热
+        # Create dummy inputs for preheating
         dummy_image = Image.new('RGB', (224, 224), color='red')
         dummy_text = "a test image"
         
@@ -601,14 +601,14 @@ class CLIPAdapter(MultimodalAdapter):
                 warmup_time = time.time() - start_time
                 warmup_times.append(warmup_time)
             except Exception as e:
-                logger.warning(f"预热运行 {i+1} 失败: {e}")
+                logger.warning(f"Warm-up operation {i+1} failed: {e}")
         
         if warmup_times:
             avg_time = np.mean(warmup_times)
             min_time = np.min(warmup_times)
             max_time = np.max(warmup_times)
             
-            logger.info(f"CLIP模型预热完成 - 平均耗时: {avg_time:.3f}s")
+            logger.info(f"CLIP model warmup complete - Average time taken: {avg_time:.3f}s")
             
             return {
                 "warmup_runs": len(warmup_times),
@@ -620,7 +620,7 @@ class CLIPAdapter(MultimodalAdapter):
         return super().warmup(num_runs)
     
     def unload_model(self) -> None:
-        """卸载模型释放内存"""
+        """Unload model to free up memory"""
         if self.model is not None:
             del self.model
             self.model = None
@@ -636,8 +636,8 @@ class CLIPAdapter(MultimodalAdapter):
         self.preprocess_fn = None
         self.is_loaded = False
         
-        # 清理GPU缓存
+        # Clear GPU cache
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             
-        logger.info("CLIP模型已卸载")
+        logger.info("CLIP model has been unloaded")
