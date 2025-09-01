@@ -266,8 +266,8 @@ class AdapterRegistry:
             self.register(
                 'stable_diffusion',
                 StableDiffusionAdapter,
-                frameworks=['diffusers'],
-                architectures=['stable_diffusion', 'stable_diffusion_xl', 'sdxl', 'sd1', 'sd2']
+                frameworks=['diffusers', 'stable_diffusion'],
+                architectures=['stable_diffusion', 'stable_diffusion_xl', 'sdxl', 'sd_1_5', 'sd_2_1', 'sd_2_1_unclip']
             )
             registration_results['stable_diffusion'] = True
             logger.info("✅ Stable Diffusion Adapter Registration Successful")
@@ -284,7 +284,7 @@ class AdapterRegistry:
             self.register(
                 'flux',
                 FluxAdapter,
-                frameworks=['diffusers'],
+                frameworks=['diffusers_flux'],
                 architectures=['flux', 'flux-dev', 'flux-schnell', 'flux-pro']
             )
             registration_results['flux'] = True
@@ -319,18 +319,18 @@ class AdapterRegistry:
         try:
             from .multimodal.openclip import OpenCLIPAdapter
             self.register(
-                'openclip',
+                'open_clip',
                 OpenCLIPAdapter,
                 frameworks=['open_clip'],
                 architectures=['convnext', 'coca', 'eva', 'openclip-vit']
             )
-            registration_results['openclip'] = True
+            registration_results['open_clip'] = True
             logger.info("✅ OpenCLIP Adapter Registration Successful")
         except ImportError as e:
-            registration_results['openclip'] = False
+            registration_results['open_clip'] = False
             logger.debug(f"OpenCLIP Adapter Registration Failed: {e}")
         except Exception as e:
-            registration_results['openclip'] = False
+            registration_results['open_clip'] = False
             logger.error(f"❌ OpenCLIP Adapter Registration Exception: {e}")
         
         # Summary of Registration Results
@@ -392,19 +392,42 @@ class AdapterRegistry:
             # Check architecture mapping first
             architecture = model_info.get('architecture', '').lower()
             if architecture:
-                for arch, adapter_name in self._architecture_mappings.items():
-                    if arch.lower() == architecture or arch.lower() in architecture:
+                # Specific SD architecture mapping
+                sd_arch_mappings = {
+                    'sd_2_1_unclip':
+                    'stable_diffusion',
+                    'sdxl':
+                    'stable_diffusion',
+                    'sd_2_1':
+                    'stable_diffusion',
+                    'sd_1_5':
+                    'stable_diffusion',
+                    'controlnet':
+                    'controlnet',
+                    'controlnet_canny':
+                    'controlnet',
+                    'controlnet_depth':
+                    'controlnet',
+                    'flux': 'flux',
+                    'flux-dev': 'flux',
+                    'flux-schnell': 'flux'
+                }
+                for arch_pattern, adapter_name in sd_arch_mappings.items():
+                    if arch_pattern in architecture:
+                # for arch, adapter_name in self._architecture_mappings.items():
+                #     if arch.lower() == architecture or arch.lower() in architecture:
                         if adapter_name in self._adapters:
                             logger.info(f"✅ Matched by architecture '{architecture}' -> {adapter_name}")
                             return adapter_name
             # Check framework mapping
             framework = model_info.get('framework', '').lower()
-            if framework:
-                for fw, adapter_name in self._framework_mappings.items():
-                    if fw.lower() == framework or fw.lower() in framework:
-                        if adapter_name in self._adapters:
-                            logger.info(f"✅ Matched by framework '{framework}' -> {adapter_name}")
-                            return adapter_name
+            if framework == 'diffusers':
+                pass
+                # for fw, adapter_name in self._framework_mappings.items():
+                #     if fw.lower() == framework or fw.lower() in framework:
+                #         if adapter_name in self._adapters:
+                #             logger.info(f"✅ Matched by framework '{framework}' -> {adapter_name}")
+                #             return adapter_name
         # Priority 2: Path-based detection with strict ordering
         model_path_lower = str(model_path).lower()
         # MOST SPECIFIC PATTERNS FIRST
@@ -440,7 +463,7 @@ class AdapterRegistry:
                 logger.info("✅ ControlNet fallback -> stable_diffusion")
                 return 'stable_diffusion'
         # 4. FLUX models (specific path patterns)
-        flux_specific_patterns = ['flux.1-dev', 'flux.1-schnell', 'flux.1-pro', '/flux/']
+        flux_specific_patterns = ['flux.1-dev', 'flux.1-schnell', 'flux.1-pro', '/flux/', 'flux-dev', 'flux-schnell']
         if any(pattern in model_path_lower for pattern in flux_specific_patterns):
             if 'flux' in self._adapters:
                 logger.info("✅ Detected FLUX model -> flux")
@@ -449,28 +472,37 @@ class AdapterRegistry:
                 logger.info("✅ FLUX fallback -> stable_diffusion")
                 return 'stable_diffusion'
         # 5. Stable Diffusion models (broader patterns after specific ones)
-        sd_patterns = ['stable-diffusion', '/sd_', 'sdxl', 'stable_diffusion']
+        sd_patterns = ['stable-diffusion', '/sd_', '/sd_2_1_unclip/', '/sd_2_1/', '/sdxl_base_1.0/', 'stable_diffusion', 'sd_xl']
         if any(pattern in model_path_lower for pattern in sd_patterns):
             if 'stable_diffusion' in self._adapters:
                 logger.info("✅ Detected Stable Diffusion model -> stable_diffusion")
-                return 'stable_diffusion'
-        # 6. Classification models
+                return 'stable_diffusion'        
+        # 6. Generic patterns (fallback)
+        if 'controlnet' in model_path_lower:
+            if 'controlnet' in self._adapters:
+                return 'controlnet'
+        # 7. Classification models
         if any(pattern in model_path_lower for pattern in ['resnet', 'efficientnet', 'vit', 'classification']):
             if 'torchvision_classification' in self._adapters:
                 logger.info("✅ Detected classification model -> torchvision_classification")
                 return 'torchvision_classification'
-        # 7. CLIP models
+        # 8. CLIP models
         if any(pattern in model_path_lower for pattern in ['clip', 'vit-b-32', 'vit-l-14']):
             if 'clip' in self._adapters:
                 logger.info("✅ Detected CLIP model -> clip")
                 return 'clip'
-        # 8. Generic detection fallback (detection models)
+        # 9. OpenCLIP models
+        if any(pattern in model_path_lower for pattern in ['open_clip', 'vit-b-32', 'vit-h-14']):
+            if 'open_clip' in self._adapters:
+                logger.info("✅ Detected OpenCLIP model -> openclip")
+                return 'openclip'
+        # 10. Generic detection fallback (detection models)
         if any(keyword in model_path_lower for keyword in ['detect', 'object', 'bbox']):
             if 'ultralytics' in self._adapters:
                 logger.info("🎯 Generic detection -> ultralytics")
                 return 'ultralytics'
         # FINAL FALLBACK - NO DEFAULT TO FLUX!
-        logger.warning(f"⚠️ Unable to auto-detect adapter for: {model_path}")
+        logger.warning(f"⚠️ No adapter detected for: {model_path}")
         logger.info(f"📊 Available adapters: {list(self._adapters.keys())}")
         return None  # Return None instead of defaulting to 'flux'
         
