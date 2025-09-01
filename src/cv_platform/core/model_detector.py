@@ -35,6 +35,11 @@ class ModelDetector(BaseManager):
     def __init__(self, models_root: Optional[Path] = None):
         """Initialize the model detector with BaseManager capabilities"""
         super().__init__("ModelDetector")
+
+        self._cached_models = None
+        self._last_scan_time = 0
+        self.cache_deruation = 300
+        self.MIN_FILE_SIZE = 1024 * 1024
         
         # Core configuration
         self.models_root = Path(models_root) if models_root else Path("./cv_models")
@@ -62,7 +67,12 @@ class ModelDetector(BaseManager):
                 'framwork': 'diffusers'
             },
             'stable_diffusion': {
-                'patterns': ['stable_diffusion', 'sd_2_1', 'sd_2_1_unclip', 'sdxl', 'flux'],
+                'patterns': ['stable_diffusion', 'sd_2_1', 'sd_2_1_unclip', 'sdxl'],
+                'type': 'generation',
+                'framework': 'diffusers'
+            },
+            'flux': {
+                'patterns': ['FLUX.1-schnell', 'flux'],
                 'type': 'generation',
                 'framework': 'diffusers'
             },
@@ -227,28 +237,295 @@ class ModelDetector(BaseManager):
         Returns:
             List of detected model information
         """
-        scan_start_time = time.time()
+        if self._cached_models and not force_rescan:
+            logger.debug(f"Using cached model detection results ")
+            return self._cached_models
         
-        # Check if we need to rescan
-        if not force_rescan and self._detected_models and self._last_scan_time:
-            scan_age = time.time() - self._last_scan_time
-            if scan_age < 300:  # 5 minutes cache
-                logger.debug(f"Using cached model detection results (age: {scan_age:.1f}s)")
-                self.increment_metric('cache_hits')
-                return self._detected_models.copy()
+        logger.info("Starting enhanced model detection...")
+        start_time = time.time()
+
+        all_models =[]
+        processed_directories = set()
+
+        # Phase 1: Detect HuggingFace model directories
+        logger.info("Phase 1: Scanning for HuggingFace model directories...")
+        hf_models = self._detect_huggingface_directories()
+
+        for hf_dir, hf_info in hf_models.items():
+            processed_directories.add(hf_dir)
+
+            # Create directory-level model entry
+            model_info = self._create_directory_model(hf_dir, hf_info)
+            if model_info:
+                all_models.append(model_info)
+                logger.debug(f"HF Directory model: {model_info.name}")
         
-        # Perform new scan
-        self.increment_metric('scans_performed')
-        detected_count = self._perform_model_scan()
+        logger.info (f"Found {len(hf_models)} HuggingFace model directories")
+
+        # Phase 2: Scan remaining individual files
+        logger.info('Phase 2: Scanning individual model files...')
+        directories_to_scan = self._walk_model_directories()
+        individual_count = 0
+
+        for directory in directories_to_scan:
+            for file_path in directory.rglob('*'):
+                # Skip if file is inside a processed HF directory
+                if self._is_inside_processed_directory(file_path, processed_directories):
+                    continue
+                # Check if it's a model file
+                if (file_path.is_file() and 
+                    file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS and 
+                    file_path.stat().st_size > self.MIN_FILE_SIZE):
+                    model_info = self._analyze_model_file(file_path)
+                    if model_info and model_info.confidence >= 0.5:
+                        all_models.append(model_info)
+                        individual_count += 1
+                        logger.debug(f"Individual model: {model_info.name}")
         
-        scan_duration = time.time() - scan_start_time
-        self.update_metric('last_scan_duration', scan_duration)
-        self.update_metric('last_scan_models_found', detected_count)
+        logger.info(f"Found {individual_count} individual model files")
+
+        # Phase 3: Final cleanup and dedulication
+        final_models = self._deduplicate_model(all_models)
+
+        detection_time = time.time() - start_time
+        logger.info(f"Model detection completed in {detection_time:.2f}s")
+        logger.info(f"Total models found: {len(final_models)} (from {len(all_models)} cadidates)")
+
+        # Update cache
+        self._cached_models = final_models
+        self._last_scan_time = time.time()
+
+        return final_models
+
+        # scan_start_time = time.time()
+
+        # # Check if we need to rescan
+        # if not force_rescan and self._detected_models and self._last_scan_time:
+        #     scan_age = time.time() - self._last_scan_time
+        #     if scan_age < 300:  # 5 minutes cache
+        #         logger.debug(f"Using cached model detection results (age: {scan_age:.1f}s)")
+        #         self.increment_metric('cache_hits')
+        #         return self._detected_models.copy()
         
-        logger.info(f"Model detection completed in {scan_duration:.2f}s - found {detected_count} models")
+        # # Perform new scan
+        # self.increment_metric('scans_performed')
+        # detected_count = self._perform_model_scan()
         
-        return self._detected_models.copy()
+        # scan_duration = time.time() - scan_start_time
+        # self.update_metric('last_scan_duration', scan_duration)
+        # self.update_metric('last_scan_models_found', detected_count)
+        
+        # logger.info(f"Model detection completed in {scan_duration:.2f}s - found {detected_count} models")
+        
+        # return self._detected_models.copy()
+
+    def _detect_huggingface_directories(self) -> Dict[Path, Dict[str, Any]]:
+        """
+        Detect HuggingFace model directories
+
+        Returns:
+        Dict mapping directory paths to their metadata
+        """
+        hf_directories = {}
+
+        # HuggingFace indicators
+        hf_indicators = {
+            'config_files': ['config.json', 'model_index.json', 'pytorch_model.bin.index.json'],
+            'component_dirs': ['unet', 'vae', 'text_encoder', 'text_encoder_2', 'transformer', 'tokenizer', 'scheduler', 'safety_checker'],
+            'model_files': ['pytorch_model.bin', 'model.safetensors', 'diffusion_pytorch_model.safetensors']
+        }
+
+        directories_to_scan = self._walk_model_directories()
+
+        for scan_dir in directories_to_scan:
+            for potential_hf_dir in scan_dir.rglob('*'):
+                if not potential_hf_dir.is_dir():
+                    continue
+
+                # Skip if already processed as parent
+                if any(potential_hf_dir.is_relative_to(existing) for existing in hf_directories.keys()):
+                    continue
+
+                # Check HuggingFace indicators
+                hf_score = self._calculate_hf_score(potential_hf_dir, hf_indicators)
+                if hf_score >= 0.6: # Threshold for HF directory detection
+                    hf_info = self._analyze_hf_directory(potential_hf_dir, hf_indicators)
+                    hf_directories[potential_hf_dir] = hf_info
+                    logger.debug(f"HF Directory detected: {potential_hf_dir} (score: {hf_score:.2f})")
+
+        return hf_directories
     
+    def _calculate_hf_score(self, directory: Path, indicators: Dict[str, List[str]]) -> float:
+        """Calculate HuggingFace detection score for a directory"""
+        score = 0.0
+
+        # Check or config files (high weight)
+        config_files = [f for f in directory.iterdir() if f.is_file()]
+        config_count = sum(1 for f in config_files if f.name in indicators['config_files'])
+        if config_count > 0:
+            score += 0.4
+
+        # Check for component directories (medium weight)
+        subdirs = [d for d in directory.iterdir() if d.is_dir()]
+        component_count = sum(1 for d in subdirs if d.name in indicators['component_dirs'])
+        if component_count >= 2:
+            score += 0.3
+        elif component_count == 1:
+            score += 0.15
+
+        # Check for model files (medium weight)
+        model_files = [f for f in directory.rglob('*.safetensors') if f.is_file()]
+        model_files.extend([f for f in directory.rglob('*.bin') if f.is_file()])
+
+        if len(model_files) > 1:
+            score += 0.3
+        elif len(model_files) == 1:
+            score += 0.1
+
+        # Check naming patterns (low weight)
+        dir_name = directory.name.lower()
+        model_patterns = ['sd_', 'stable', 'flux', 'controlnet', 'clip', 'vit']
+        if any(pattern in dir_name for pattern in model_patterns):
+            score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _create_directory_model(self, hf_dir: Path, hf_info: Dict[str, Any]) -> Optional[ModelInfo]:
+        """Create a ModelInfo for a HuggingFace directory"""
+        try:
+            # Calculate total directory size
+            total_size = sum(f.stat().st_size for f in hf_dir.rglob('*') if f.is_file())
+            total_size_mb = total_size / (1024 * 1024)
+
+            # Get latest modification time
+            latest_mtime = max(
+                (f.stat().st_mtime for f in hf_dir.rglob('*') if f.is_file()),
+                default=hf_dir.stat().st_mtime
+            )
+
+            # Determine model characteristics
+            model_type, framework, architecture = self._analyze_hf_directory_type(hf_dir)
+
+            # Generate model name from directory
+            model_name = self._generate_model_name(hf_dir)
+
+            # Create metadata
+            metadata = {
+                'is_huggingface_directory': True,
+                'component_count': len(list(hf_dir.iterdir())),
+                'config_files': hf_info.get('config_files', []),
+                'model_files_count': len(list(hf_dir.rglob('*.safetensor')) + list(hf_dir.rglob('*.bin'))),
+                'directory_path': str(hf_dir)                                       
+            }
+
+            return ModelInfo(
+                name=model_name,
+                path=hf_dir, # Point to directory, not individual file
+                type=model_type,
+                framework=framework,
+                architecture=architecture,
+                confidence=0.95, # High confidence for HF directories
+                file_size_mb=total_size_mb,
+                last_modified=latest_mtime,
+                metadata=metadata
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create directory model for {hf_dir}: {e}")
+        return None
+
+    def _analyze_hf_directory(self, directory: Path, indicators: Dict[str, List[str]]) -> Dict[str, Any]:
+        """Minimal HF directory analysis"""
+        return {
+            'config_files': [f.name for f in directory.iterdir() if f.is_file() and f.name in indicators.get('config_files', [])],
+            'component_dirs': [d.name for d in directory.iterdir() if d.is_dir()],
+            'model_files': [f.name for f in directory.rglob('*.safetensors')] + [f.name for f in directory.rglob('*.bin')],
+            'total_size_mb': sum(f.stat().st_size for f in directory.rglob('*') if f.is_file()) / (1024 * 1024),
+            'file_count': len(list(directory.rglob('*')))
+        }
+    
+    def _analyze_hf_directory_type(self, hf_dir: Path) -> Tuple[str, str, str]:
+        """Analyze HuggingFace directory to determine model type"""
+        dir_name = hf_dir.name.lower()
+        dir_path = str(hf_dir).lower()
+
+        # Generation models
+        if any(pattern in dir_name for pattern in ['sd_2_1', 'stable-diffusion-2-1']):
+            if 'unclip' in dir_name:
+                return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip'
+            else:
+                return 'generation', 'diffusers', 'stable_diffusion_2_1'
+        
+        elif any(pattern in dir_name for pattern in ['sd_1_5', 'stable-diffusion-v1-5']):
+            return 'generation', 'diffusers', 'stable_diffusion_1_5'
+        
+        elif any(pattern in dir_name for pattern in ['sdxl', 'stable-diffusion-xl']):
+            return 'generation', 'diffusers', 'stable_diffusion_xl'
+        
+        elif 'flux' in dir_name:
+            if 'schnell' in dir_name:
+                return 'generation', 'diffusers', 'flux_schnell'
+            elif 'dev' in dir_name:
+                return 'generation', 'diffusers', 'flux_dev'
+            else:
+                return 'generation', 'diffusers', 'flux'
+            
+        elif 'controlnet' in dir_name:
+            if 'canny' in dir_name:
+                return 'generation', 'diffusers', 'controlnet_canny'
+            elif 'depth' in dir_name:
+                return 'generation', 'diffusers', 'controlnet_depth'
+            else:
+                return 'generation', 'diffusers', 'controlnet'
+            
+        # Multimodal models
+        elif any(pattern in dir_name for pattern in ['clip', 'vit']):
+            return 'multimodal', 'transformers', 'clip'
+        
+        # Default fallback
+        if 'generation' in dir_path:
+            return 'generation', 'diffusers', 'unknown'
+        elif 'multimodal' in dir_path:
+            return 'multimodal', 'transformers', 'unknown'
+        else:
+            return 'unknown', 'unknown', 'unknown' 
+        
+    def _is_inside_processed_directory(self, file_path: Path, processed_dirs: set) -> bool:
+        """Check if a file is inside any processed HuggingFace directory"""
+        for processed_dir in processed_dirs:
+            try:
+                file_path.relative_to(processed_dir)
+                return True # File is inside this processed directory 
+            except ValueError:
+                continue # File is not inside this directory
+        return False
+
+    def _deduplicate_model(slef, models: List[ModelInfo]) -> List[ModelInfo]:
+        """Remove duplicaet models and prefer directory-level models"""
+        seen_names = {}
+        unique_models = []
+
+        # Sort by preference: HF directories first, then individual files
+        sorted_models = sorted(models, key=lambda m: (
+            not m.metadata.get('is_huggingface_directory', False), # HF dirs first
+            m.name.lower() # Then alphabetically
+        ))
+
+        for model in sorted_models:
+            key = model.name.lower()
+
+            if key not in seen_names:
+                seen_names[key] = model
+                unique_models.append(model)
+            else:
+                # Prefer HF directory over individual files
+                existing = seen_names[key]
+                if (model.metadata.get('is_huggingface_directory', False) and not existing.metadata.get('is_huggingface_directory', False)):
+                    # Replace individual file with HF directory
+                    idx = unique_models.index(existing)
+                    unique_models[idx] = model
+                    seen_names[key] = model
+        return unique_models
+
     def _perform_model_scan(self) -> int:
         """
         Perform the actual model scanning
@@ -450,62 +727,62 @@ class ModelDetector(BaseManager):
                 return 'generation' , 'diffusers', 'controlnet', 0.85
 
         # Stable Diffusion
-        # if 'generation' in parent_dirs and 'stable_diffusion' in parent_dirs:
-        #     sd_version_dir = None
-        #     for parent_dir in parent_dirs:
-        #         if any(version in parent_dir for version in ['sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']):
-        #             sd_version_dir = parent_dir
-        #             break
+        if 'generation' in parent_dirs and 'stable_diffusion' in parent_dirs:
+            sd_version_dir = None
+            for parent_dir in parent_dirs:
+                if any(version in parent_dir for version in ['sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']):
+                    sd_version_dir = parent_dir
+                    break
             
-        #     if sd_version_dir:
-        #         if 'sd_2_1_unclip' in sd_version_dir:
-        #             return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95 
-        #         elif 'sd_2_1' in sd_version_dir:
-        #             return 'generation', 'diffusers', 'stable-diffusion_2_1', 0.95 
-        #         elif 'sd_1_5' in sd_version_dir:
-        #             return 'generation', 'diffusers', 'stable-diffusion_1_5', 0.95 
-        #         elif 'sd_2_0' in sd_version_dir:
-        #             return 'generation', 'diffusers', 'stable-diffusion_2_0', 0.95 
-        #         elif 'sdxl' in sd_version_dir:
-        #             return 'generation', 'diffusers', 'stable-diffusion_xl', 0.95 
-        #     else:
-        #         return 'generation', 'diffusers', 'stable_diffusion', 0.8
-        
-        # # Other models in generation dir  
-        # if 'generation' in parent_dirs:
-        #     if any(pattern in full_path_lower for pattern in ['flux', 'dalle']):
-        #         return 'generation', 'diffusers', 'text_to_image', 0.8
-        #     elif any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion']):
-        #         return 'generation', 'diffusers', 'stable_diffusion', 0.7
-        
-        
-        sd_patterns = ['stable-diffusion', 'stable_diffusion', 'sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']
-        has_sd_in_filename = any(pattern in filename for pattern in sd_patterns)
-        has_sd_in_path = any(pattern in full_path_lower for pattern in sd_patterns)
-        
-        if has_sd_in_filename or has_sd_in_path:
-            if 'sdxl' in full_path_lower or 'xl' in full_path_lower:
-                return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
-            elif 'sd_2_1' in full_path_lower or 'sd-2-1' in full_path_lower or 'v2-1' in full_path_lower:
-                if 'unclip' in full_path_lower:
-                    return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95
-                else:
-                    'generation', 'diffusers', 'stable_diffusion_2_1', 0.9
-            elif 'sd_1_5' in full_path_lower or 'sd-1-5' in full_path_lower or '1.5' in full_path_lower:
-                return 'generation', 'diffusers', 'stable_diffusion_1_5', 0.9
-            elif 'sd_2_0' in full_path_lower or 'sd-2-0' in full_path_lower or '2.0' in full_path_lower:
-                return 'generation', 'diffusers', 'stable_diffusion_2_0', 0.9
+            if sd_version_dir:
+                if 'sd_2_1_unclip' in sd_version_dir:
+                    return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95 
+                elif 'sd_2_1' in sd_version_dir:
+                    return 'generation', 'diffusers', 'stable-diffusion_2_1', 0.95 
+                elif 'sd_1_5' in sd_version_dir:
+                    return 'generation', 'diffusers', 'stable-diffusion_1_5', 0.95 
+                elif 'sd_2_0' in sd_version_dir:
+                    return 'generation', 'diffusers', 'stable-diffusion_2_0', 0.95 
+                elif 'sdxl' in sd_version_dir:
+                    return 'generation', 'diffusers', 'stable-diffusion_xl', 0.95 
             else:
                 return 'generation', 'diffusers', 'stable_diffusion', 0.8
+        
+        # Other models in generation dir  
+        if 'generation' in parent_dirs:
+            if any(pattern in full_path_lower for pattern in ['flux', 'dalle']):
+                return 'generation', 'diffusers', 'text_to_image', 0.8
+            elif any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion']):
+                return 'generation', 'diffusers', 'stable_diffusion', 0.7
+        
+        
+        # sd_patterns = ['stable-diffusion', 'stable_diffusion', 'sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']
+        # has_sd_in_filename = any(pattern in filename for pattern in sd_patterns)
+        # has_sd_in_path = any(pattern in full_path_lower for pattern in sd_patterns)
+        
+        # if has_sd_in_filename or has_sd_in_path:
+        #     if 'sdxl' in full_path_lower or 'xl' in full_path_lower:
+        #         return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
+        #     elif 'sd_2_1' in full_path_lower or 'sd-2-1' in full_path_lower or 'v2-1' in full_path_lower:
+        #         if 'unclip' in full_path_lower:
+        #             return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95
+        #         else:
+        #             'generation', 'diffusers', 'stable_diffusion_2_1', 0.9
+        #     elif 'sd_1_5' in full_path_lower or 'sd-1-5' in full_path_lower or '1.5' in full_path_lower:
+        #         return 'generation', 'diffusers', 'stable_diffusion_1_5', 0.9
+        #     elif 'sd_2_0' in full_path_lower or 'sd-2-0' in full_path_lower or '2.0' in full_path_lower:
+        #         return 'generation', 'diffusers', 'stable_diffusion_2_0', 0.9
+        #     else:
+        #         return 'generation', 'diffusers', 'stable_diffusion', 0.8
             
-        if any(pattern in filename for pattern in ['stable_diffusion', 'stable-diffusion', 'sd_']):
-            if 'unclip' in filename:
-                if any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
-                    return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
-                else:
-                    return 'generation', 'diffusers', 'stable_diffusion_unclip', 0.85
-            elif any(pattern in filename for pattern in ['sdxl', 'xl']): 
-                return 'generation', 'diffusers', 'sdxl', 0.9
+        # if any(pattern in filename for pattern in ['stable_diffusion', 'stable-diffusion', 'sd_']):
+        #     if 'unclip' in filename:
+        #         if any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
+        #             return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
+        #         else:
+        #             return 'generation', 'diffusers', 'stable_diffusion_unclip', 0.85
+        #     elif any(pattern in filename for pattern in ['sdxl', 'xl']): 
+        #         return 'generation', 'diffusers', 'sdxl', 0.9
             elif any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
                 if 'unclip' not in filename:
                     return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.95
