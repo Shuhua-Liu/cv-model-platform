@@ -302,7 +302,7 @@ class AdapterRegistry:
             self.register(
                 'clip',
                 CLIPAdapter,
-                frameworks=['clip', 'transformers'],
+                frameworks=['clip', 'transformers', 'openai_clip'],
                 architectures=['clip-vit-base', 'clip-vit-large', 'vit-b-32', 'vit-b-16', 
                               'vit-l-14', 'vit-l-14-336', 'rn50', 'rn101']
             )
@@ -321,8 +321,8 @@ class AdapterRegistry:
             self.register(
                 'open_clip',
                 OpenCLIPAdapter,
-                frameworks=['open_clip'],
-                architectures=['convnext', 'coca', 'eva', 'openclip-vit']
+                frameworks=['open_clip', 'openclip'],
+                architectures=['open_clip', 'vit_b_32', 'vit_h_14']
             )
             registration_results['open_clip'] = True
             logger.info("✅ OpenCLIP Adapter Registration Successful")
@@ -481,21 +481,39 @@ class AdapterRegistry:
         if 'controlnet' in model_path_lower:
             if 'controlnet' in self._adapters:
                 return 'controlnet'
-        # 7. Classification models
-        if any(pattern in model_path_lower for pattern in ['resnet', 'efficientnet', 'vit', 'classification']):
-            if 'torchvision_classification' in self._adapters:
-                logger.info("✅ Detected classification model -> torchvision_classification")
-                return 'torchvision_classification'
-        # 8. CLIP models
-        if any(pattern in model_path_lower for pattern in ['clip', 'vit-b-32', 'vit-l-14']):
-            if 'clip' in self._adapters:
-                logger.info("✅ Detected CLIP model -> clip")
-                return 'clip'
-        # 9. OpenCLIP models
-        if any(pattern in model_path_lower for pattern in ['open_clip', 'vit-b-32', 'vit-h-14']):
+        # 7. OpenCLIP models
+        openclip_patterns = ['open_clip', 'openclip', 'open-clip']
+        if any(pattern in model_path_lower for pattern in openclip_patterns):
             if 'open_clip' in self._adapters:
                 logger.info("✅ Detected OpenCLIP model -> openclip")
                 return 'openclip'
+        # 8. CLIP models
+        clip_patterns = ['/clip/', '\\\\clip\\\\', 'clip-vit', 'clip_vit']
+        if any(pattern in model_path_lower for pattern in clip_patterns):
+            if not any(pattern in model_path_lower for pattern in openclip_patterns):
+                if 'clip' in self._adapters:
+                    logger.info("✅ Detected CLIP model -> clip")
+                    return 'clip'
+        # Multimodal context detection (fallback for CLIP variants)
+        if 'multimodal' in model_path_lower and any(pattern in model_path_lower for pattern in ['vit', 'vision']):
+            if any(pattern in model_path_lower for pattern in openclip_patterns):
+                if 'openclip' in self._adapters:
+                    logger.info("✅ Detected multimodal OpenCLIP -> openclip")
+                    return 'openclip'
+            else:
+                if 'clip' in self._adapters:
+                    logger.info("✅ Detected multimodal CLIP -> clip")
+                    return 'clip'
+        # 9. Classification models
+        if 'classification' in model_path_lower:
+            if any(pattern in model_path_lower for pattern in ['resnet', 'efficientnet']):
+                if 'torchvision_classification' in self._adapters:
+                    logger.info("✅ Detected classification model -> torchvision_classification")
+                    return 'torchvision_classification' 
+            elif 'vit' in model_path_lower and 'multimodal' not in model_path_lower:
+                if 'torchvision_classification' in self._adapters:
+                    logger.info("✅ Detected ViT classification model -> torchvision_classification")
+                    return 'torchvision_classification'        
         # 10. Generic detection fallback (detection models)
         if any(keyword in model_path_lower for keyword in ['detect', 'object', 'bbox']):
             if 'ultralytics' in self._adapters:
