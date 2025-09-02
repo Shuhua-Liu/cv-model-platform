@@ -90,6 +90,11 @@ class ModelDetector(BaseManager):
                 'patterns': ['efficientnet'],
                 'type': 'classification',
                 'framework': 'torchvision'
+            },
+            'vit': {
+                'patterns': ['vit', 'vit-base-patch16-224'],
+                'type': 'classification',
+                'framework': 'transformers'
             }
         }
         
@@ -478,7 +483,7 @@ class ModelDetector(BaseManager):
                 return 'generation', 'diffusers', 'controlnet'
             
         # Multimodal models
-        elif any(pattern in dir_name for pattern in ['clip', 'vit']):
+        elif any(pattern in dir_name for pattern in ['clip', 'open_clip', 'vit']):
             return 'multimodal', 'transformers', 'clip'
         
         # Default fallback
@@ -754,35 +759,6 @@ class ModelDetector(BaseManager):
                 return 'generation', 'diffusers', 'text_to_image', 0.8
             elif any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion']):
                 return 'generation', 'diffusers', 'stable_diffusion', 0.7
-        
-        
-        # sd_patterns = ['stable-diffusion', 'stable_diffusion', 'sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']
-        # has_sd_in_filename = any(pattern in filename for pattern in sd_patterns)
-        # has_sd_in_path = any(pattern in full_path_lower for pattern in sd_patterns)
-        
-        # if has_sd_in_filename or has_sd_in_path:
-        #     if 'sdxl' in full_path_lower or 'xl' in full_path_lower:
-        #         return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
-        #     elif 'sd_2_1' in full_path_lower or 'sd-2-1' in full_path_lower or 'v2-1' in full_path_lower:
-        #         if 'unclip' in full_path_lower:
-        #             return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95
-        #         else:
-        #             'generation', 'diffusers', 'stable_diffusion_2_1', 0.9
-        #     elif 'sd_1_5' in full_path_lower or 'sd-1-5' in full_path_lower or '1.5' in full_path_lower:
-        #         return 'generation', 'diffusers', 'stable_diffusion_1_5', 0.9
-        #     elif 'sd_2_0' in full_path_lower or 'sd-2-0' in full_path_lower or '2.0' in full_path_lower:
-        #         return 'generation', 'diffusers', 'stable_diffusion_2_0', 0.9
-        #     else:
-        #         return 'generation', 'diffusers', 'stable_diffusion', 0.8
-            
-        # if any(pattern in filename for pattern in ['stable_diffusion', 'stable-diffusion', 'sd_']):
-        #     if 'unclip' in filename:
-        #         if any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
-        #             return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
-        #         else:
-        #             return 'generation', 'diffusers', 'stable_diffusion_unclip', 0.85
-        #     elif any(pattern in filename for pattern in ['sdxl', 'xl']): 
-        #         return 'generation', 'diffusers', 'sdxl', 0.9
             elif any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
                 if 'unclip' not in filename:
                     return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.95
@@ -807,15 +783,39 @@ class ModelDetector(BaseManager):
             return ' generation', 'diffusers', 'stable_diffusion_1_5', 0.9
         elif 'sdxl' in filename:
             return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
-
         
         # OpenCLIP
-        if any(pattern in filename for pattern in ['clip', 'vit-b-32', 'vit-h-14']):
-            arch = 'vit-b-32' if 'vit-b-32' in filename else ('vit-h-14' if 'vit-h-14' in filename else 'clip')
-            return 'multimodal', 'transformers', arch, 0.9
+        openclip_patterns = ['open-clip', 'openclip', 'open_clip']
+        if any(pattern in full_path_lower for pattern in openclip_patterns):
+            if 'vit-b-32' in full_path_lower:
+                return 'multimodal', 'open_clip', 'openclip_vit_b_32', 0.95
+            elif 'vit-h-14' in full_path_lower:
+                return 'multimodal', 'open_clip', 'openclip_vit_h_14', 0.95
+            elif 'vit-l-14' in full_path_lower:
+                return 'multimodal', 'open_clip', 'openclip_vit_l_14', 0.95
+            else:
+                return 'multimodal', 'open_clip', 'openclip', 0.90
+        
+        # CLIP
+        clip_patterns = ['/clip/', '\\\\clip\\\\', 'clip-vit', 'clip_vit']
+        if any(pattern in full_path_lower for pattern in clip_patterns):
+            if not any(pattern in full_path_lower for pattern in openclip_patterns):
+                if 'vit-b-32' in full_path_lower:
+                    return 'multimodal', 'transformers', 'clip_vit_base_patch32', 0.95
+                elif 'vit-l-14' in full_path_lower:
+                    return 'multimodal', 'transformers', 'clip_vit_large_patch14', 0.95
+                else:
+                    return 'multimodal', 'transformers', 'clip', 0.90      
+        
+        # Multimodal directory context (fallback)
+        if 'multimodal' in full_path_lower and 'vit' in full_path_lower:
+            if any(pattern in full_path_lower for pattern in openclip_patterns):
+                return 'multimodal', 'open_clip', 'openclip', 0.80
+            else:
+                return 'multimodal', 'transformers', 'clip', 0.80
         
         # ResNet Classification
-        if 'resnet' in filename:
+        if 'resnet' in filename and 'classification' in full_path_lower  and 'multimodal' not in full_path_lower:
             if any(variant in filename for variant in ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152']):
                 arch = next(variant for variant in ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152'] 
                            if variant in filename)
@@ -825,6 +825,9 @@ class ModelDetector(BaseManager):
         # EfficientNet Classification
         if 'efficientnet' in filename:
             return 'classification', 'torchvision', 'efficientnet', 0.9
+
+        if 'vit' in filename and 'classification' in full_path_lower  and 'multimodal' not in full_path_lower:
+            return 'classification', 'transformers', 'vit', 0.75 
         
         # DeepLab Segmentation
         if 'deeplabv3' in filename:
@@ -866,10 +869,10 @@ class ModelDetector(BaseManager):
             else:
                 return 'generation', 'unknown', 'unknown', 0.3
         elif 'multimodal' in parent_dirs:
-            if 'clip' in filename and file_size_mb > 1000:
-                return 'multimodal', 'transformers', 'clip', 0.9
-            else:
-                return 'multimodal', 'unknown', 'unknown', 0.6
+            # if 'open_clip' in filename and file_size_mb > 1000:
+            #     return 'multimodal', 'open_clip', 'openclip', 0.9
+            # else:
+            return 'multimodal', 'transformers', 'unknown', 0.3
         
         # General pattern matching with lower confidence
         for pattern_group, info in self.MODEL_PATTERNS.items():
