@@ -481,7 +481,17 @@ class ModelDetector(BaseManager):
                 return 'generation', 'diffusers', 'controlnet_depth'
             else:
                 return 'generation', 'diffusers', 'controlnet'
-            
+        
+        # Inpainting models
+        elif any(pattern in dir_name for pattern in ['inpainting', 'inpaint']):
+            if any(pattern in dir_name for pattern in ['stable-diffusion', 'stable_diffusion', 'sd_']):
+                if '2' in dir_name:
+                    return 'inpainting', 'diffusers', 'stable_diffusion_2_inpainting'
+                else:
+                    return 'inpainting', 'diffusers', 'stable_diffusion_inpainting'
+            else:
+                return 'inpainting', 'diffusers', 'inpainting'
+        
         # Multimodal models
         elif any(pattern in dir_name for pattern in ['clip', 'open_clip', 'vit']):
             return 'multimodal', 'transformers', 'clip'
@@ -707,6 +717,37 @@ class ModelDetector(BaseManager):
         elif 'mobile_sam' in filename:
             return 'segmentation', 'segment_anything', 'mobile_sam', 0.9
         
+
+        # OpenCLIP
+        openclip_patterns = ['open-clip', 'openclip', 'open_clip']
+        if any(pattern in full_path_lower for pattern in openclip_patterns):
+            if 'vit-b-32' in full_path_lower:
+                return 'multimodal', 'open_clip', 'openclip_vit_b_32', 0.95
+            elif 'vit-h-14' in full_path_lower:
+                return 'multimodal', 'open_clip', 'openclip_vit_h_14', 0.95
+            elif 'vit-l-14' in full_path_lower:
+                return 'multimodal', 'open_clip', 'openclip_vit_l_14', 0.95
+            else:
+                return 'multimodal', 'open_clip', 'openclip', 0.90
+        
+        # CLIP
+        clip_patterns = ['/clip/', '\\\\clip\\\\', 'clip-vit', 'clip_vit']
+        if any(pattern in full_path_lower for pattern in clip_patterns):
+            if not any(pattern in full_path_lower for pattern in openclip_patterns):
+                if 'vit-b-32' in full_path_lower:
+                    return 'multimodal', 'transformers', 'clip_vit_base_patch32', 0.95
+                elif 'vit-l-14' in full_path_lower:
+                    return 'multimodal', 'transformers', 'clip_vit_large_patch14', 0.95
+                else:
+                    return 'multimodal', 'transformers', 'clip', 0.90      
+        
+        # Multimodal directory context (fallback)
+        if 'multimodal' in full_path_lower and 'vit' in full_path_lower:
+            if any(pattern in full_path_lower for pattern in openclip_patterns):
+                return 'multimodal', 'open_clip', 'openclip', 0.80
+            else:
+                return 'multimodal', 'transformers', 'clip', 0.80
+        
         # ControlNet
         if 'generation' in parent_dirs and 'controlnet' in parent_dirs:
             controlnet_model_dir = None
@@ -730,6 +771,23 @@ class ModelDetector(BaseManager):
                     return 'generation' , 'diffusers', 'controlnet', 0.9
             else:
                 return 'generation' , 'diffusers', 'controlnet', 0.85
+
+        # INPAINTING MODELS (HIGH PRIORITY - before general SD)
+        if 'inpainting' in full_path_lower:
+            # SD Inpainting models
+            if any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion', 'sd_']):
+                if any(pattern in full_path_lower for pattern in ['2-inpainting', '2_inpainting', 'inpainting']):
+                    return 'inpainting', 'diffusers', 'stable_diffusion_2_inpainting', 0.95
+                else:
+                    return 'inpainting', 'diffusers', 'stable_diffusion_inpainting', 0.90
+            
+            # LaMa models
+            elif 'lama' in full_path_lower:
+                return 'inpainting', 'pytorch', 'lama', 0.95
+            
+            # Generic inpainting
+            else:
+                return 'inpainting', 'pytorch', 'inpainting', 0.70
 
         # Stable Diffusion
         if 'generation' in parent_dirs and 'stable_diffusion' in parent_dirs:
@@ -784,36 +842,6 @@ class ModelDetector(BaseManager):
         elif 'sdxl' in filename:
             return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
         
-        # OpenCLIP
-        openclip_patterns = ['open-clip', 'openclip', 'open_clip']
-        if any(pattern in full_path_lower for pattern in openclip_patterns):
-            if 'vit-b-32' in full_path_lower:
-                return 'multimodal', 'open_clip', 'openclip_vit_b_32', 0.95
-            elif 'vit-h-14' in full_path_lower:
-                return 'multimodal', 'open_clip', 'openclip_vit_h_14', 0.95
-            elif 'vit-l-14' in full_path_lower:
-                return 'multimodal', 'open_clip', 'openclip_vit_l_14', 0.95
-            else:
-                return 'multimodal', 'open_clip', 'openclip', 0.90
-        
-        # CLIP
-        clip_patterns = ['/clip/', '\\\\clip\\\\', 'clip-vit', 'clip_vit']
-        if any(pattern in full_path_lower for pattern in clip_patterns):
-            if not any(pattern in full_path_lower for pattern in openclip_patterns):
-                if 'vit-b-32' in full_path_lower:
-                    return 'multimodal', 'transformers', 'clip_vit_base_patch32', 0.95
-                elif 'vit-l-14' in full_path_lower:
-                    return 'multimodal', 'transformers', 'clip_vit_large_patch14', 0.95
-                else:
-                    return 'multimodal', 'transformers', 'clip', 0.90      
-        
-        # Multimodal directory context (fallback)
-        if 'multimodal' in full_path_lower and 'vit' in full_path_lower:
-            if any(pattern in full_path_lower for pattern in openclip_patterns):
-                return 'multimodal', 'open_clip', 'openclip', 0.80
-            else:
-                return 'multimodal', 'transformers', 'clip', 0.80
-        
         # ResNet Classification
         if 'resnet' in filename and 'classification' in full_path_lower  and 'multimodal' not in full_path_lower:
             if any(variant in filename for variant in ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152']):
@@ -847,6 +875,20 @@ class ModelDetector(BaseManager):
         # U-Net Detection
         if 'unet' in filename or 'u_net' in filename:
             return 'segmentation', 'pytorch', 'unet', 0.8
+
+        # DINOv3 models
+        dinov3_patterns = ['dinov3', 'dinov2', 'dino_v3']
+        if any(pattern in full_path_lower for pattern in dinov3_patterns):
+            if 'vits' in filename:
+                return 'feature_extraction', 'pytorch', 'dinov3_vits14', 0.95
+            elif 'vitb' in filename:
+                return 'feature_extraction', 'pytorch', 'dinov3_vitb14', 0.95
+            elif 'vitl' in filename:
+                return 'feature_extraction', 'pytorch', 'dinov3_vitl14', 0.95
+            elif 'vitg' in filename:
+                return 'feature_extraction', 'pytorch', 'dinov3_vitg14', 0.95
+            else:
+                return 'feature_extraction', 'pytorch', 'dinov3', 0.85
         
         # Fallback inference based on directory structure
         if 'segmentation' in parent_dirs:
@@ -869,9 +911,6 @@ class ModelDetector(BaseManager):
             else:
                 return 'generation', 'unknown', 'unknown', 0.3
         elif 'multimodal' in parent_dirs:
-            # if 'open_clip' in filename and file_size_mb > 1000:
-            #     return 'multimodal', 'open_clip', 'openclip', 0.9
-            # else:
             return 'multimodal', 'transformers', 'unknown', 0.3
         
         # General pattern matching with lower confidence

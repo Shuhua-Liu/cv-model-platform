@@ -394,6 +394,51 @@ llava_7b:
   top_p: 0.9               # Nucleus sampling parameter
 
 # =============================================================================
+# Inpainting Models
+# =============================================================================
+
+# LaMa - Large Mask Inpainting
+lama_big:
+  type: inpainting
+  path: "{models_root}/inpainting/lama/big-lama/"
+  framework: pytorch
+  architecture: lama
+  device: auto
+  
+  # Inpainting parameters
+  pad_out_to_modulo: 8
+  max_resolution: [2048, 2048]
+  supports_large_masks: true
+  
+  # Processing
+  batch_size: 1
+  input_format: "RGB + mask"
+
+# Stable Diffusion 2.0 Inpainting - Text-guided inpainting
+stable_diffusion_2_inpainting:
+  type: inpainting
+  path: "{models_root}/inpainting/stable-diffusion-2-inpainting/"
+  framework: diffusers
+  architecture: stable_diffusion_2_inpainting
+  device: auto
+  
+  # Generation parameters
+  num_inference_steps: 50
+  guidance_scale: 7.5
+  strength: 1.0
+  width: 512
+  height: 512
+  
+  # Memory optimization
+  enable_memory_efficient_attention: true
+  cpu_offload: false
+  
+  # Safety
+  safety_checker: false
+  requires_safety_checker: false
+  text_guided: true
+  
+# =============================================================================
 # Model Groups and Aliases
 # =============================================================================
 

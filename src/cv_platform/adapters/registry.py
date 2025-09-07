@@ -332,6 +332,51 @@ class AdapterRegistry:
         except Exception as e:
             registration_results['open_clip'] = False
             logger.error(f"❌ OpenCLIP Adapter Registration Exception: {e}")
+
+                # DINOv3 feature extraction adapter
+        try:
+            from .feature_extraction.dinov3 import DINOv3Adapter
+            self.register(
+                'dinov3',
+                DINOv3Adapter,
+                frameworks=['pytorch', 'transformers'],
+                architectures=['dinov3', 'dinov3_vits14', 'dinov3_vitb14', 'dinov3_vitl14', 'dinov3_vitg14']
+            )
+            registration_results['dinov3'] = True
+            logger.info("✅ DINOv3 Adapter Registration Successful")
+        except ImportError as e:
+            registration_results['dinov3'] = False
+            logger.debug(f"DINOv3 Adapter Registration Failed: {e}")
+        
+        # LaMa inpainting adapter
+        try:
+            from .inpainting.lama import LaMaAdapter
+            self.register(
+                'lama',
+                LaMaAdapter,
+                frameworks=['pytorch'],
+                architectures=['lama', 'large_mask_inpainting']
+            )
+            registration_results['lama'] = True
+            logger.info("✅ LaMa Adapter Registration Successful")
+        except ImportError as e:
+            registration_results['lama'] = False
+            logger.debug(f"LaMa Adapter Registration Failed: {e}")
+        
+        # SD Inpainting adapter
+        try:
+            from .inpainting.stable_diffusion_inpainting import StableDiffusionInpaintingAdapter
+            self.register(
+                'stable_diffusion_inpainting',
+                StableDiffusionInpaintingAdapter,
+                frameworks=['diffusers_inpainting', 'diffusers'],
+                architectures=['stable_diffusion_inpainting', 'sd_inpainting', 'sd_2_inpainting']
+            )
+            registration_results['stable_diffusion_inpainting'] = True
+            logger.info("✅ SD Inpainting Adapter Registration Successful")
+        except ImportError as e:
+            registration_results['stable_diffusion_inpainting'] = False
+            logger.debug(f"SD Inpainting Adapter Registration Failed: {e}")
         
         # Summary of Registration Results
         success_count = sum(registration_results.values())
@@ -462,6 +507,20 @@ class AdapterRegistry:
             elif 'stable_diffusion' in self._adapters:
                 logger.info("✅ ControlNet fallback -> stable_diffusion")
                 return 'stable_diffusion'
+        # Priority: Inpainting models detection (before general SD)
+        if 'inpainting' in model_path_lower:
+            # SD Inpainting models in inpainting directory
+            if any(pattern in model_path_lower for pattern in ['stable-diffusion', 'stable_diffusion', 'sd_']):
+                if any(pattern in model_path_lower for pattern in ['2-inpainting', '2_inpainting', 'inpainting']):
+                    if 'stable_diffusion_inpainting' in self._adapters:
+                        logger.info("✅ SD Inpainting model detected → stable_diffusion_inpainting")
+                        return 'stable_diffusion_inpainting'
+            
+            # LaMa models
+            if 'lama' in model_path_lower:
+                if 'lama' in self._adapters:
+                    logger.info("✅ LaMa model detected → lama")
+                    return 'lama'
         # 4. FLUX models (specific path patterns)
         flux_specific_patterns = ['flux.1-dev', 'flux.1-schnell', 'flux.1-pro', '/flux/', 'flux-dev', 'flux-schnell']
         if any(pattern in model_path_lower for pattern in flux_specific_patterns):
