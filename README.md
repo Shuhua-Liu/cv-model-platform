@@ -111,11 +111,13 @@ The platform automatically searches for model files in the following locations:
 
 | Category | Supported Models | Status |
 |------|------------|------|
-| **Detection** | YOLOv8/v9, Detectron2, RT-DETR | ✅ |
-| **Segmentation** | SAM, Mask2Former, DeepLabV3 | ✅ |
-| **Classification** | ResNet, EfficientNet, ViT | ✅ |
+| **Detection** | YOLOv8/v9, Detectron2, DETR | ✅ |
+| **Segmentation** | SAM, DeepLabV3 | ✅ |
+| **Classification** | ResNet, ViT | ✅ |
 | **Generation** | Stable Diffusion, FLUX, ControlNet | ✅ |
-| **Multimodal** | CLIP, BLIP, LLaVA | 🚧 |
+| **Multimodal** | CLIP, OpenCLIP | 🚧 |
+| **Inpainting** | Stable Diffusion 2 Inpainting, LaMa | 🚧 |
+| **Feature Extraction** | DINOv3 | 🚧 |
 
 Full compatibility list: [Model Compatibility Matrix](docs/compatibility_matrix.md)
 
