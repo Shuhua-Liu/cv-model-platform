@@ -289,13 +289,50 @@ class MultimodalAdapter(BaseModelAdapter):
         pass
 
 
+
+# Inpainting Adapter
+class InpaintingAdapter(BaseModelAdapter):
+    """Inpainting model adapter base class"""
+    @abstractmethod
+    def inpaint(self,
+                image: Union[str, Path, Image.Image, np.ndarray],
+                mask: Union[str, Path, Image.Image, np.ndarray],
+                **kwargs) -> Any:
+        """
+        Perform inpainting on image using mask
+        Args:
+            image: Input image
+            mask: Inpainting mask
+        Returns:
+            Inpainted image or result
+        """
+        pass
+
+# Feature Extraction Adapter
+class FeatureExtractionAdapter(BaseModelAdapter):
+    """Feature extraction model adapter base class"""
+    @abstractmethod
+    def extract_features(self,
+                        images: Union[str, Path, Image.Image, List[Image.Image]],
+                        **kwargs) -> Any:
+        """
+        Extract features from images
+        Args:
+            images: Input image(s)
+        Returns:
+            Extracted features
+        """
+        pass
+
 # Adapter Type Mapping
 ADAPTER_TYPE_MAP = {
     'detection': DetectionAdapter,
     'segmentation': SegmentationAdapter, 
     'classification': ClassificationAdapter,
     'generation': GenerationAdapter,
-    'multimodal': MultimodalAdapter
+    'multimodal': MultimodalAdapter,
+    'inpainting': InpaintingAdapter,
+    'feature_extraction': FeatureExtractionAdapter
 }
 
 
