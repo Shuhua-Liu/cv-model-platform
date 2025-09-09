@@ -13,7 +13,7 @@ from PIL import Image
 import torch
 from loguru import logger
 
-from ..base import GenerationAdapter
+from ..base import InpaintingAdapter
 
 try:
     from diffusers import StableDiffusionInpaintPipeline, AutoPipelineForInpainting
@@ -23,7 +23,7 @@ except ImportError:
     logger.warning("diffusers not available for SD inpainting")
 
 
-class StableDiffusionInpaintingAdapter(GenerationAdapter):
+class StableDiffusionInpaintingAdapter(InpaintingAdapter):
     """Stable Diffusion inpainting adapter"""
     
     def __init__(self, 
