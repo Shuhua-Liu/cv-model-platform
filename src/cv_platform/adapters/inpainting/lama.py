@@ -14,7 +14,7 @@ import cv2
 from PIL import Image
 from loguru import logger
 
-from ..base import BaseModelAdapter
+from ..base import InpaintingAdapter
 
 try:
     import yaml
@@ -25,7 +25,7 @@ except ImportError:
     logger.warning("LaMa dependencies not available: pip install omegaconf")
 
 
-class LaMaAdapter(BaseModelAdapter):
+class LaMaAdapter(InpaintingAdapter):
     """LaMa inpainting model adapter"""
     
     def __init__(self, 
