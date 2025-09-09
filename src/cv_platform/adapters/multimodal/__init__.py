@@ -1,10 +1,10 @@
 """
-多模态模型适配器
+Multimodal model adapters
 """
 
 __all__ = []
 
-# 动态导入可用的适配器
+# Dynamic import available adapters
 try:
     from .clip import CLIPAdapter
     __all__.append('CLIPAdapter')
