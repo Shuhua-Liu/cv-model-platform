@@ -57,14 +57,29 @@ class ModelDetector(BaseManager):
                 'framework': 'huggingface'
             },
             'sam': {
-                'patterns': ['sam_vit', 'mobile_sam', 'segment_anything'],
+                'patterns': ['sam', 'sam_vit', 'mobile_sam', 'segment_anything'],
                 'type': 'segmentation',
                 'framework': 'segment_anything'
             },
+            'dinov3': {
+                'patterns': ['dino', 'dinov3', 'dino_v3'],
+                'type': 'feature extraction',
+                'framework': 'diffusers'
+            },
+            'lama': {
+                'patterns': ['lama', 'lama_vit', 'lama_mobile', 'big_lama'],
+                'type': 'inpainting',
+                'framework': 'pytorch'
+            },
+            'stable_diffusion_inpainting': {
+                'patterns': ['stable_diffusion_inpainting', 'sd_2_inpainting', 'sd_inpainting'],
+                'type': 'inpainting',
+                'framework': 'diffusers'
+            },
             'controlnet':{
-                'patterns': ['controlnet-canny', 'controlnet-seg', 'controlnet-depth', 'controlnet-pose'],
+                'patterns': ['controlnet', 'controlnet-canny', 'controlnet-seg', 'controlnet-depth', 'controlnet-pose'],
                 'type': 'generation',
-                'framwork': 'diffusers'
+                'framework': 'diffusers'
             },
             'stable_diffusion': {
                 'patterns': ['stable_diffusion', 'sd_2_1', 'sd_2_1_unclip', 'sdxl'],
@@ -452,57 +467,54 @@ class ModelDetector(BaseManager):
         """Analyze HuggingFace directory to determine model type"""
         dir_name = hf_dir.name.lower()
         dir_path = str(hf_dir).lower()
+        parent_dirs = [p.lower() for p in hf_dir.parts]
+
+        # Combine dir_name and all parent dirs for robust pattern matching
+        all_names = parent_dirs + [dir_name, dir_path]
 
         # Generation models
-        if any(pattern in dir_name for pattern in ['sd_2_1', 'stable-diffusion-2-1']):
-            if 'unclip' in dir_name:
+        if any(any(pattern in name for pattern in ['sd_2_1', 'stable-diffusion-2-1']) for name in all_names):
+            if any('unclip' in name for name in all_names):
                 return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip'
             else:
                 return 'generation', 'diffusers', 'stable_diffusion_2_1'
-        
-        elif any(pattern in dir_name for pattern in ['sd_1_5', 'stable-diffusion-v1-5']):
+        elif any(any(pattern in name for pattern in ['sd_1_5', 'stable-diffusion-v1-5']) for name in all_names):
             return 'generation', 'diffusers', 'stable_diffusion_1_5'
-        
-        elif any(pattern in dir_name for pattern in ['sdxl', 'stable-diffusion-xl']):
+        elif any(any(pattern in name for pattern in ['sdxl', 'stable-diffusion-xl']) for name in all_names):
             return 'generation', 'diffusers', 'stable_diffusion_xl'
-        
-        elif 'flux' in dir_name:
-            if 'schnell' in dir_name:
+        elif any('flux' in name for name in all_names):
+            if any('schnell' in name for name in all_names):
                 return 'generation', 'diffusers', 'flux_schnell'
-            elif 'dev' in dir_name:
+            elif any('dev' in name for name in all_names):
                 return 'generation', 'diffusers', 'flux_dev'
             else:
                 return 'generation', 'diffusers', 'flux'
-            
-        elif 'controlnet' in dir_name:
-            if 'canny' in dir_name:
+        elif any('controlnet' in name for name in all_names):
+            if any('canny' in name for name in all_names):
                 return 'generation', 'diffusers', 'controlnet_canny'
-            elif 'depth' in dir_name:
+            elif any('depth' in name for name in all_names):
                 return 'generation', 'diffusers', 'controlnet_depth'
             else:
                 return 'generation', 'diffusers', 'controlnet'
-        
         # Inpainting models
-        elif any(pattern in dir_name for pattern in ['inpainting', 'inpaint']):
-            if any(pattern in dir_name for pattern in ['stable-diffusion', 'stable_diffusion', 'sd_']):
-                if '2' in dir_name:
+        elif any(any(pattern in name for pattern in ['inpainting', 'inpaint']) for name in all_names):
+            if any(any(pattern in name for pattern in ['stable-diffusion', 'stable_diffusion', 'sd_']) for name in all_names):
+                if any('2' in name for name in all_names):
                     return 'inpainting', 'diffusers', 'stable_diffusion_2_inpainting'
                 else:
                     return 'inpainting', 'diffusers', 'stable_diffusion_inpainting'
             else:
                 return 'inpainting', 'diffusers', 'inpainting'
-        
         # Multimodal models
-        elif any(pattern in dir_name for pattern in ['clip', 'open_clip', 'vit']):
+        elif any(any(pattern in name for pattern in ['clip', 'open_clip', 'vit']) for name in all_names):
             return 'multimodal', 'transformers', 'clip'
-        
         # Default fallback
-        if 'generation' in dir_path:
+        if any('generation' in name for name in all_names):
             return 'generation', 'diffusers', 'unknown'
-        elif 'multimodal' in dir_path:
+        elif any('multimodal' in name for name in all_names):
             return 'multimodal', 'transformers', 'unknown'
         else:
-            return 'unknown', 'unknown', 'unknown' 
+            return 'unknown', 'unknown', 'unknown'
         
     def _is_inside_processed_directory(self, file_path: Path, processed_dirs: set) -> bool:
         """Check if a file is inside any processed HuggingFace directory"""
@@ -773,74 +785,131 @@ class ModelDetector(BaseManager):
                 return 'generation' , 'diffusers', 'controlnet', 0.85
 
         # INPAINTING MODELS (HIGH PRIORITY - before general SD)
-        if 'inpainting' in full_path_lower:
-            # SD Inpainting models
-            if any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion', 'sd_']):
-                if any(pattern in full_path_lower for pattern in ['2-inpainting', '2_inpainting', 'inpainting']):
-                    return 'inpainting', 'diffusers', 'stable_diffusion_2_inpainting', 0.95
-                else:
-                    return 'inpainting', 'diffusers', 'stable_diffusion_inpainting', 0.90
-            
-            # LaMa models
-            elif 'lama' in full_path_lower:
-                return 'inpainting', 'pytorch', 'lama', 0.95
-            
-            # Generic inpainting
-            else:
-                return 'inpainting', 'pytorch', 'inpainting', 0.70
-
-        # Stable Diffusion
-        if 'generation' in parent_dirs and 'stable_diffusion' in parent_dirs:
+        is_stable_diffusion = False
+        is_inpainting = False
+        # Check if Stable Diffusion model
+        if (('generation' in parent_dirs and 'stable_diffusion' in parent_dirs) or  # standard path
+            ('inpainting' in parent_dirs) or  # inpainting specific dir
+            any('stable_diffusion' in dir_name or 'stable-diffusion' in dir_name for dir_name in parent_dirs) or
+            any('sd_' in dir_name for dir_name in parent_dirs)):  # include sd_ dirs
+            is_stable_diffusion = True
+        if is_stable_diffusion:
+            # check if inpainting model
+            is_inpainting = ('inpainting' in parent_dirs or
+                            'inpaint' in full_path_lower or
+                            any('inpaint' in dir_name for dir_name in parent_dirs))
+            # Check SD version - look for in path and filename
             sd_version_dir = None
-            for parent_dir in parent_dirs:
-                if any(version in parent_dir for version in ['sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']):
+            for parent_dir in parent_dirs + [filename]:  # also check filename
+                if any(version in parent_dir for version in ['sd_1_5', 'sd_2_1', 'sd_2_0', 'sd_2_', 'sdxl']):
                     sd_version_dir = parent_dir
                     break
-            
             if sd_version_dir:
                 if 'sd_2_1_unclip' in sd_version_dir:
-                    return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95 
-                elif 'sd_2_1' in sd_version_dir:
-                    return 'generation', 'diffusers', 'stable-diffusion_2_1', 0.95 
+                    arch = 'stable-diffusion_2_1_unclip_inpaint' if is_inpainting else 'stable-diffusion_2_1_unclip'
+                    return 'generation', 'diffusers', arch, 0.95
+                elif 'sd_2_1' in sd_version_dir or 'sd_2_' in sd_version_dir:
+                    arch = 'stable-diffusion_2_1_inpaint' if is_inpainting else 'stable-diffusion_2_1'
+                    return 'generation', 'diffusers', arch, 0.95
                 elif 'sd_1_5' in sd_version_dir:
-                    return 'generation', 'diffusers', 'stable-diffusion_1_5', 0.95 
+                    arch = 'stable-diffusion_1_5_inpaint' if is_inpainting else 'stable-diffusion_1_5'
+                    return 'generation', 'diffusers', arch, 0.95
                 elif 'sd_2_0' in sd_version_dir:
-                    return 'generation', 'diffusers', 'stable-diffusion_2_0', 0.95 
+                    arch = 'stable-diffusion_2_0_inpaint' if is_inpainting else 'stable-diffusion_2_0'
+                    return 'generation', 'diffusers', arch, 0.95
                 elif 'sdxl' in sd_version_dir:
-                    return 'generation', 'diffusers', 'stable-diffusion_xl', 0.95 
+                    arch = 'stable-diffusion_xl_inpaint' if is_inpainting else 'stable-diffusion_xl'
+                    return 'generation', 'diffusers', arch, 0.95
             else:
-                return 'generation', 'diffusers', 'stable_diffusion', 0.8
+                # No specific version found, but confirmed as SD model
+                arch = 'stable_diffusion_inpaint' if is_inpainting else 'stable_diffusion'
+                return 'generation', 'diffusers', arch, 0.8
         
         # Other models in generation dir  
         if 'generation' in parent_dirs:
             if any(pattern in full_path_lower for pattern in ['flux', 'dalle']):
                 return 'generation', 'diffusers', 'text_to_image', 0.8
-            elif any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion']):
-                return 'generation', 'diffusers', 'stable_diffusion', 0.7
-            elif any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
-                if 'unclip' not in filename:
-                    return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.95
+            elif any(pattern in full_path_lower for pattern in ['stable-diffusion', 'sd_', 'sdxl']):
+                # Here also check inpainting
+                is_inpainting = ('inpainting' in parent_dirs or
+                                'inpaint' in full_path_lower or
+                                any('inpaint' in dir_name for dir_name in parent_dirs))
+                if 'sdxl' in full_path_lower:
+                    arch = 'stable_diffusion_xl_inpaint' if is_inpainting else 'stable_diffusion_xl'
+                    return 'generation', 'diffusers', arch, 0.9
                 else:
-                    return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
-            elif any(pattern in filename for pattern in ['v1.5', '1.5', '1_5']): 
-                return 'generation', 'diffusers', 'stable_diffusion_1_5', 0.9
+                    arch = 'stable_diffusion_inpaint' if is_inpainting else 'stable_diffusion'
+                    return 'generation', 'diffusers', arch, 0.8
             else:
-                if any(keyword in filename for keyword in ['768-nonema-pruned', '768-ema-pruned']):
-                    if 'unclip' in filename:
-                        return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.9
-                    else:
-                        return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.9
-                return 'generation', 'diffusers', 'stable_diffusion', 0.7
+                return 'generation', 'unknown', 'unknown', 0.3
+        # if 'inpainting' in parent_dirs and 'inpainting' in full_path_lower:
+        #     # SD Inpainting models
+        #     if any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion', 'sd_']):
+        #         if any(pattern in full_path_lower for pattern in ['2-inpainting', '2_inpainting', 'inpainting']):
+        #             return 'inpainting', 'diffusers', 'stable_diffusion_2_inpainting', 0.95
+        #         else:
+        #             return 'inpainting', 'diffusers', 'stable_diffusion_inpainting', 0.90
+            
+        #     # LaMa models
+        #     elif 'lama' in full_path_lower:
+        #         return 'inpainting', 'pytorch', 'lama', 0.95
+            
+        #     # Generic inpainting
+        #     else:
+        #         return 'inpainting', 'pytorch', 'inpainting', 0.70
+
+        # # Stable Diffusion
+        # if 'generation' in parent_dirs and 'stable_diffusion' in parent_dirs:
+        #     sd_version_dir = None
+        #     for parent_dir in parent_dirs:
+        #         if any(version in parent_dir for version in ['sd_1_5', 'sd_2_1', 'sd_2_0', 'sdxl']):
+        #             sd_version_dir = parent_dir
+        #             break
+            
+        #     if sd_version_dir:
+        #         if 'sd_2_1_unclip' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_2_1_unclip', 0.95 
+        #         elif 'sd_2_1' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_2_1', 0.95 
+        #         elif 'sd_1_5' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_1_5', 0.95 
+        #         elif 'sd_2_0' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_2_0', 0.95 
+        #         elif 'sdxl' in sd_version_dir:
+        #             return 'generation', 'diffusers', 'stable-diffusion_xl', 0.95 
+        #     else:
+        #         return 'generation', 'diffusers', 'stable_diffusion', 0.8
         
-        elif any(pattern in filename for pattern in ['sd_2_1', 'sd-2-1']):
-            if 'unclip' in filename:
-                return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
-            else:
-                return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.95
-        elif any(pattern in filename for pattern in ['sd_1_5', 'sd-1-5']):
-            return ' generation', 'diffusers', 'stable_diffusion_1_5', 0.9
-        elif 'sdxl' in filename:
-            return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
+        # # Other models in generation dir  
+        # if 'generation' in parent_dirs:
+        #     if any(pattern in full_path_lower for pattern in ['flux', 'dalle']):
+        #         return 'generation', 'diffusers', 'text_to_image', 0.8
+        #     elif any(pattern in full_path_lower for pattern in ['stable-diffusion', 'stable_diffusion']):
+        #         return 'generation', 'diffusers', 'stable_diffusion', 0.7
+        #     elif any(pattern in filename for pattern in ['2.1', '2_1', 'sd-2-1', 'sd_2_1', 'v2.1']):
+        #         if 'unclip' not in filename:
+        #             return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.95
+        #         else:
+        #             return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
+        #     elif any(pattern in filename for pattern in ['v1.5', '1.5', '1_5']): 
+        #         return 'generation', 'diffusers', 'stable_diffusion_1_5', 0.9
+        #     else:
+        #         if any(keyword in filename for keyword in ['768-nonema-pruned', '768-ema-pruned']):
+        #             if 'unclip' in filename:
+        #                 return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.9
+        #             else:
+        #                 return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.9
+        #         return 'generation', 'diffusers', 'stable_diffusion', 0.7
+        
+        # elif any(pattern in filename for pattern in ['sd_2_1', 'sd-2-1']):
+        #     if 'unclip' in filename:
+        #         return 'generation', 'diffusers', 'stable_diffusion_2_1_unclip', 0.95
+        #     else:
+        #         return 'generation', 'diffusers', 'stable_diffusion_2_1', 0.95
+        # elif any(pattern in filename for pattern in ['sd_1_5', 'sd-1-5']):
+        #     return ' generation', 'diffusers', 'stable_diffusion_1_5', 0.9
+        # elif 'sdxl' in filename:
+        #     return 'generation', 'diffusers', 'stable_diffusion_xl', 0.9
         
         # ResNet Classification
         if 'resnet' in filename and 'classification' in full_path_lower  and 'multimodal' not in full_path_lower:
@@ -868,9 +937,29 @@ class ModelDetector(BaseManager):
             else:
                 return 'segmentation', 'torchvision', 'deeplabv3', 0.8
         
+        # Detectron2 Faster R-CNN
+        if 'faster_rcnn' in filename:
+            confidence = 0.95 if 'r50' in filename or 'r101' in filename else 0.8
+            return 'detection', 'detectron2', 'faster_rcnn', confidence
+        # Detectron2 Mask R-CNN
+        if 'mask_rcnn' in filename:
+            confidence = 0.95 if 'r50' in filename or 'r101' in filename else 0.8
+            return 'segmentation', 'detectron2', 'mask_rcnn', confidence
+        # Detectron2 RetinaNet
+        if 'retinanet' in filename:
+            confidence = 0.9
+            return 'detection', 'detectron2', 'retinanet', confidence
+        # Detectron2 FCOS
+        if 'fcos' in filename:
+            confidence = 0.9
+            return 'detection', 'detectron2', 'fcos', confidence
+        # Detectron2 Keypoint R-CNN
+        if 'keypoint_rcnn' in filename or ('keypoint' in filename and 'rcnn' in filename):
+            confidence = 0.9
+            return 'detection', 'detectron2', 'keypoint_rcnn', confidence
         # Mask2Former Detection
         if 'mask2former' in filename:
-            return 'segmentation', 'detectron2', 'mask2former', 0.9
+            return 'segmentation', 'detectron2', 'mask2former', 0.95
         
         # U-Net Detection
         if 'unet' in filename or 'u_net' in filename:
