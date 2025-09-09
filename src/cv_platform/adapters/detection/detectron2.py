@@ -37,7 +37,6 @@ class Detectron2Adapter(DetectionAdapter, SegmentationAdapter):
     Detectron2 framework adapter supporting detection and segmentation models
     """
     # Supported model configurations from model zoo
-
     MODEL_CONFIGS = {
         # Detection Models
         "faster_rcnn_r50": "COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml",
@@ -58,13 +57,9 @@ class Detectron2Adapter(DetectionAdapter, SegmentationAdapter):
     }
 
     def __init__(self, model_path: str = None, device: str = "auto", **kwargs):
-        """Initialize the Detectron2 adapter"""
-
         if not DETECTRON2_AVAILABLE:
             raise ImportError("Detectron2 is required but not installed")
-
         super().__init__(model_path, device, **kwargs)
-
         self.predictor = None
         self.cfg = None
         self.metadata = None
@@ -381,26 +376,25 @@ class Detectron2Adapter(DetectionAdapter, SegmentationAdapter):
         return f"class_{class_id}"
 
 
-    # Registration function
-    def register_detectron2_adapter():
-        """Register Detectron2 adapter with the system"""
-        if DETECTRON2_AVAILABLE:
-            from ..registry import register_adapter
+# Registration function
+def register_detectron2_adapter():
+    """Register Detectron2 adapter with the system"""
+    if DETECTRON2_AVAILABLE:
+        from ..registry import register_adapter
 
-            register_adapter(
-                name="detectron2",
-                adapter_class=Detectron2Adapter,
-                frameworks=["detectron2"],
-                architectures=["faster_rcnn", "mask_rcnn", "retinanet", "fcos", 
-                            "mask2former", "panoptic_fpn", "keypoint_rcnn"]
-            )
-            logger.info("✅ Detectron2 adapter registered")
-        else:
-            logger.warning("⚠️ Detectron2 adapter not registered - detectron2 not installed")
+        register_adapter(
+            name="detectron2",
+            adapter_class=Detectron2Adapter,
+            frameworks=["detectron2"],
+            architectures=["faster_rcnn", "mask_rcnn", "retinanet", "fcos", 
+                        "mask2former", "panoptic_fpn", "keypoint_rcnn"]
+        )
+        logger.info("✅ Detectron2 adapter registered")
+    else:
+        logger.warning("⚠️ Detectron2 adapter not registered - detectron2 not installed")
 
-    # Auto-register when module is imported
-    try:
-        register_detectron2_adapter()
-    except Exception as e:
-        logger.warning(f"Failed to auto-register Detectron2 adapter: {e}")
-
+# Auto-register when module is imported
+try:
+    register_detectron2_adapter()
+except Exception as e:
+    logger.warning(f"Failed to auto-register Detectron2 adapter: {e}")
