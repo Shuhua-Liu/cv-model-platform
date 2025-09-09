@@ -127,7 +127,7 @@ class ModelManager(BaseManager):
         self.detector = None
         self.cache = None
         
-        # Model Configuration and state - 确保初始化为空字典而非None
+        # Model Configuration and state - ensure initialized to empty dict instead of None
         self._model_configs = {}
         self._available_models = {}
         
@@ -150,17 +150,17 @@ class ModelManager(BaseManager):
                     logger.warning("Config manager is None, using default configuration")
                     self._model_configs = {'models': {}}
                 else:
-                    # 安全获取配置，确保不会返回None
+                    # Safely obtain config to ensure not return None
                     config_result = self.config_manager.get_models_config()
                     if config_result is None:
                         logger.warning("get_models_config returned None, using empty config")
                         self._model_configs = {'models': {}}
                     else:
                         self._model_configs = config_result
-                        # 确保models字段存在
+                        # ensure models exists
                         if 'models' not in self._model_configs:
                             self._model_configs['models'] = {}
-                        # 确保models字段不是None
+                        # Ensure models is not None
                         if self._model_configs['models'] is None:
                             self._model_configs['models'] = {}
                     
@@ -226,7 +226,7 @@ class ModelManager(BaseManager):
                 logger.warning(f"Failed to initialize cache: {e}, disabling cache")
                 self.cache = None
             
-            # 确保核心配置结构正确
+            # ensure core config correct
             if self._model_configs is None:
                 self._model_configs = {'models': {}}
             elif not isinstance(self._model_configs, dict):
@@ -237,7 +237,7 @@ class ModelManager(BaseManager):
             elif self._model_configs['models'] is None:
                 self._model_configs['models'] = {}
             
-            # 确保_available_models初始化
+            # ensure _available_models initialized
             if self._available_models is None:
                 self._available_models = {}
             
@@ -248,11 +248,11 @@ class ModelManager(BaseManager):
                 self._discover_models()
             except Exception as e:
                 logger.warning(f"Model discovery failed: {e}")
-                # 确保_available_models是字典
+                # ensure _available_models is dict
                 if self._available_models is None:
                     self._available_models = {}
             
-            # 安全的指标设置
+            # safety update metrics
             try:
                 models_count = 0
                 if self._available_models is not None and isinstance(self._available_models, dict):
@@ -271,7 +271,7 @@ class ModelManager(BaseManager):
             
         except Exception as e:
             logger.error(f"ModelManager initialization failed: {e}")
-            # 确保关键属性即使在失败时也有有效值
+            # ensure key attribute is available even failed
             if self._available_models is None:
                 self._available_models = {}
             if self._model_configs is None:
@@ -388,7 +388,7 @@ class ModelManager(BaseManager):
         """Discover and register available models with enhanced error handling"""
         logger.info("Starting model discovery...")
         
-        # 确保_available_models是字典
+        # ensure _available_models is dict
         if self._available_models is None:
             self._available_models = {}
         
@@ -402,7 +402,7 @@ class ModelManager(BaseManager):
             
             if models_config and isinstance(models_config, dict):
                 for model_name, model_config in models_config.items():
-                    if model_name and model_config:  # 确保键值都不为None
+                    if model_name and model_config:  # ensure key is non-empty
                         self._available_models[model_name] = {
                             'name': model_name,
                             'config': model_config,
@@ -419,7 +419,7 @@ class ModelManager(BaseManager):
         try:
             if self.detector:
                 detected_models = self.detector.detect_models()
-                # 安全检查detected_models
+                # safety check detected_models
                 if detected_models is not None and isinstance(detected_models, list):
                     for model_info in detected_models:
                         if model_info and hasattr(model_info, 'name') and model_info.name not in self._available_models:
@@ -447,7 +447,7 @@ class ModelManager(BaseManager):
             logger.error(f"Model auto-discovery failed: {e}")
             self.update_metric('models_detected', 0)
         
-        # 安全更新指标
+        # safety update metrics
         try:
             total_models = len(self._available_models) if self._available_models else 0
             self.update_metric('total_models_available', total_models)
@@ -542,23 +542,23 @@ class ModelManager(BaseManager):
                 models_root = self.config_manager.get_models_root()
                 model_path = model_path.format(models_root=models_root)
             
-            # 确保 model_path 是字符串
+            # Ensure model_path is string
             model_path = str(model_path)
             
-            # Get the adapter name - 增加更多检测逻辑
+            # Get the adapter name - Add more detection logic
             adapter_name = model_config.get('adapter')
             
             if not adapter_name:
-                # 先尝试从配置中获取
+                # Try to get from config first
                 framework = model_config.get('framework')
                 architecture = model_config.get('architecture')
                 model_type = model_config.get('type')
-                
-                # 手动检测逻辑
+
+                # Manually detection logic
                 adapter_name = self._detect_adapter_manually(model_path, framework, architecture, model_type)
                 
                 if not adapter_name:
-                    # 尝试自动检测
+                    # Try to auto-detect
                     model_info = model_entry.get('model_info')
                     adapter_name = self.registry.auto_detect_adapter(
                         model_path, 
@@ -570,8 +570,8 @@ class ModelManager(BaseManager):
             
             # Create adapter instance
             logger.info(f"Loading model: {model_name} (adapter: {adapter_name})")
-            
-            # 创建适配器时确保参数正确
+
+            # Ensure kwargs correct when creating adapter
             create_kwargs = {
                 'device': model_config.get('device', 'auto'),
                 'cache_enabled': model_config.get('cache_enabled', True)
@@ -580,7 +580,7 @@ class ModelManager(BaseManager):
             
             adapter = self.registry.create_adapter(
                 model_path=model_path,
-                adapter_name=adapter_name,  # 明确指定适配器名称
+                adapter_name=adapter_name,  # Explicitly specify adapter name
                 **create_kwargs
             )
             
@@ -617,12 +617,12 @@ class ModelManager(BaseManager):
         Detect adapter manually
         """
         model_path_lower = str(model_path).lower()
+        
         logger.info(f"🔧 Detect adapter manually:")
         logger.info(f"   Path: {model_path}")
         logger.info(f"   Framework: {framework}")
         logger.info(f"   Architecture: {architecture}")
         logger.info(f"   Type: {model_type}")
-
         
         # 1. Based on framework
         if framework:
@@ -658,6 +658,20 @@ class ModelManager(BaseManager):
             # Ensure not detection model
             if not any(exclusion in model_path_lower for exclusion in ['yolo', 'detr', 'detection']):
                 return 'torchvision_classification'
+            
+        if any(pattern in model_path_lower for pattern in [
+            'detectron2', 'faster_rcnn', 'mask_rcnn', 'retinanet',
+            'fcos', 'mask2former', 'panoptic_fpn', 'keypoint_rcnn'
+            ]):
+            return 'detectron2'
+        # 2. Model zoo configuration names
+        detectron2_configs = [
+            'faster_rcnn_r50', 'faster_rcnn_r101', 'retinanet_r50',
+            'fcos_r50', 'mask_rcnn_r50', 'mask_rcnn_r101',
+            'mask2former_r50', 'panoptic_fpn_r50', 'keypoint_rcnn_r50'
+        ]
+        if any(config in model_path for config in detectron2_configs):
+            return 'detectron2'
         
         # 3. Based on model type
         if model_type:
