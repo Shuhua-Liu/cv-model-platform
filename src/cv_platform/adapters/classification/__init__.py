@@ -1,10 +1,10 @@
 """
-分类模型适配器
+Classification Model Adapter
 """
 
 __all__ = []
 
-# 动态导入可用的适配器
+# Dynamic import available adapters
 try:
     from .torchvision import TorchvisionAdapter
     __all__.append('TorchvisionAdapter')
