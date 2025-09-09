@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from PIL import Image
 from loguru import logger
 
-from ..base import BaseModelAdapter
+from ..base import FeatureExtractionAdapter
 
 try:
     import torchvision.transforms as T
@@ -25,7 +25,7 @@ except ImportError:
     logger.warning("torchvision not available for DINOv3")
 
 
-class DINOv3Adapter(BaseModelAdapter):
+class DINOv3Adapter(FeatureExtractionAdapter):
     """DINOv3 model adapter for feature extraction"""
     
     def __init__(self, 
