@@ -4,7 +4,7 @@ Generation model adapters
 
 __all__ = []
 
-# Dynamic import of available adapters
+# Dynamic import available adapters
 try:
     from .stable_diffusion import StableDiffusionAdapter
     __all__.append('StableDiffusionAdapter')
