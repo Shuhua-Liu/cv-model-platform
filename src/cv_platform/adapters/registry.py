@@ -158,6 +158,27 @@ class AdapterRegistry:
         
         registration_results = {}
         
+        # Detectron2 Detection/Segmentation Adapter
+        try:
+            from .detection.detectron2 import Detectron2Adapter
+            self.register(
+                'detectron2',
+                Detectron2Adapter,
+                frameworks=['detectron2'],
+                architectures=[
+                    'faster_rcnn', 'mask_rcnn', 'retinanet', 'fcos',
+                    'mask2former', 'panoptic_fpn', 'keypoint_rcnn'
+                ]
+            )
+            registration_results['detectron2'] = True
+            logger.info("✅ Detectron2 Adapter Registration Successful")
+        except ImportError as e:
+            registration_results['detectron2'] = False
+            logger.debug(f"Detectron2 Adapter Registration Failed: {e}")
+        except Exception as e:
+            registration_results['detectron2'] = False
+            logger.error(f"❌ Detectron2 Adapter Registration Exception: {e}")
+       
         # YOLO Detection Adapter
         try:
             from .detection.ultralytics import UltralyticsAdapter
