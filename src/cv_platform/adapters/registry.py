@@ -7,6 +7,7 @@ Provides dynamic registration, lookup, and creation of adapters.
 from typing import Dict, Type, List, Optional, Any
 from pathlib import Path
 import importlib
+from huggingface_hub import model_info
 from loguru import logger
 
 from .base import BaseModelAdapter
@@ -435,8 +436,33 @@ class AdapterRegistry:
         # Priority 1: Use model_info if available and reliable
         if model_info:
             # Check architecture mapping first
+            framework = model_info.get('framework', '').lower()
+            # Detectron2 framework detection
+            if framework == 'detectron2':
+                if 'detectron2' in self._adapters:
+                    logger.info(f"✅ Matched by framework 'detectron2' -> detectron2")
+                    return 'detectron2'
+            # Check architecture mapping
             architecture = model_info.get('architecture', '').lower()
             if architecture:
+                # Detectron2 architecture mappings
+                detectron2_arch_mappings = {
+                    'faster_rcnn': 'detectron2',
+                    'mask_rcnn': 'detectron2',
+                    'retinanet': 'detectron2',
+                    'fcos': 'detectron2',
+                    'mask2former': 'detectron2',
+                    'panoptic_fpn': 'detectron2',
+                    'keypoint_rcnn': 'detectron2'
+                }
+                for arch_pattern, adapter_name in detectron2_arch_mappings.items():
+                    if arch_pattern in architecture:
+                        if adapter_name in self._adapters:
+                            logger.info(f"✅ Matched by architecture '{architecture}' -> {adapter_name}")
+                            return adapter_name
+                   
+            # architecture = model_info.get('architecture', '').lower()
+            # if architecture:
                 # Specific SD architecture mapping
                 sd_arch_mappings = {
                     'sd_2_1_unclip':
@@ -459,8 +485,6 @@ class AdapterRegistry:
                 }
                 for arch_pattern, adapter_name in sd_arch_mappings.items():
                     if arch_pattern in architecture:
-                # for arch, adapter_name in self._architecture_mappings.items():
-                #     if arch.lower() == architecture or arch.lower() in architecture:
                         if adapter_name in self._adapters:
                             logger.info(f"✅ Matched by architecture '{architecture}' -> {adapter_name}")
                             return adapter_name
@@ -468,13 +492,27 @@ class AdapterRegistry:
             framework = model_info.get('framework', '').lower()
             if framework == 'diffusers':
                 pass
-                # for fw, adapter_name in self._framework_mappings.items():
-                #     if fw.lower() == framework or fw.lower() in framework:
-                #         if adapter_name in self._adapters:
-                #             logger.info(f"✅ Matched by framework '{framework}' -> {adapter_name}")
-                #             return adapter_name
+    
         # Priority 2: Path-based detection with strict ordering
         model_path_lower = str(model_path).lower()
+        # DETECTRON2 PATTERNS FIRST (highest priority for detectron2)
+        if any(pattern in model_path_lower for pattern in [
+            'detectron2', 'faster_rcnn', 'mask_rcnn', 'retinanet',
+            'fcos', 'mask2former', 'panoptic_fpn', 'keypoint_rcnn'
+        ]):
+            if 'detectron2' in self._adapters:
+                logger.info("🎯 Detectron2 pattern detected -> detectron2")
+                return 'detectron2'
+        # Model zoo configuration names for detectron2
+        detectron2_configs = [
+            'faster_rcnn_r50', 'faster_rcnn_r101', 'retinanet_r50',
+            'fcos_r50', 'mask_rcnn_r50', 'mask_rcnn_r101',
+            'mask2former_r50', 'panoptic_fpn_r50', 'keypoint_rcnn_r50'
+        ]
+        if any(config in model_path_lower for config in detectron2_configs):
+            if 'detectron2' in self._adapters:
+                logger.info("🎯 Detectron2 model zoo config detected -> detectron2")
+                return 'detectron2'
         # MOST SPECIFIC PATTERNS FIRST
         # 1. YOLO models (highest priority - most specific)
         yolo_patterns = ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x',
@@ -507,8 +545,11 @@ class AdapterRegistry:
             elif 'stable_diffusion' in self._adapters:
                 logger.info("✅ ControlNet fallback -> stable_diffusion")
                 return 'stable_diffusion'
+       
         # Priority: Inpainting models detection (before general SD)
-        if 'inpainting' in model_path_lower:
+        model_path_parts = str(model_path).lower().split('/')
+        # Only apply inpainting detection to models actually in inpainting directories
+        if 'inpainting' in model_path_parts:
             # SD Inpainting models in inpainting directory
             if any(pattern in model_path_lower for pattern in ['stable-diffusion', 'stable_diffusion', 'sd_']):
                 if any(pattern in model_path_lower for pattern in ['2-inpainting', '2_inpainting', 'inpainting']):
@@ -517,7 +558,7 @@ class AdapterRegistry:
                         return 'stable_diffusion_inpainting'
             
             # LaMa models
-            if 'lama' in model_path_lower:
+            elif 'lama' in model_path_lower:
                 if 'lama' in self._adapters:
                     logger.info("✅ LaMa model detected → lama")
                     return 'lama'
@@ -573,11 +614,59 @@ class AdapterRegistry:
                 if 'torchvision_classification' in self._adapters:
                     logger.info("✅ Detected ViT classification model -> torchvision_classification")
                     return 'torchvision_classification'        
+        
+        # Generic fallbacks by model type
+        if model_info:
+            model_type = model_info.get('type', '').lower()
+            if model_type == 'detection':
+                # Try detectron2 first, then ultralytics
+                if 'detectron2' in self._adapters:
+                    logger.info("🎯 Generic detection -> detectron2 (primary choice)")
+                    return 'detectron2'
+                elif 'ultralytics' in self._adapters:
+                    logger.info("🎯 Generic detection -> ultralytics (fallback)")
+                    return 'ultralytics'
+            elif model_type == 'segmentation':
+                # Try detectron2 for segmentation first, then SAM
+                if any(pattern in model_path_lower for pattern in ['mask', 'rcnn', 'former']):
+                    if 'detectron2' in self._adapters:
+                        logger.info("🎯 Generic segmentation -> detectron2")
+                        return 'detectron2'
+                elif 'sam' in self._adapters:
+                    logger.info("🎯 Generic segmentation -> sam")
+                    return 'sam'
+            elif model_type == 'generation':
+                if 'stable_diffusion' in self._adapters:
+                    logger.info("🎯 Generic generation -> stable_diffusion")
+                    return 'stable_diffusion'
+            elif model_type == 'classification':
+                if 'torchvision_classification' in self._adapters:
+                    logger.info("🎯 Generic classification -> torchvision_classification")
+                    return 'torchvision_classification'
+            elif model_type == 'multimodal':
+                if 'clip' in self._adapters:
+                    logger.info("🎯 Generic multimodal -> clip")
+                    return 'clip'
+                elif 'openclip' in self._adapters:
+                    logger.info("🎯 Generic multimodal -> openclip")
+                    return 'openclip'
+            elif model_type == 'inpainting':
+                if 'stable_diffusion_inpainting' in self._adapters:
+                    logger.info("🎯 Generic inpainting -> stable_diffusion_inpainting")
+                    return 'stable_diffusion_inpainting'
+                elif 'lama' in self._adapters:
+                    logger.info("🎯 Generic inpainting -> lama")
+                    return 'lama'
+        
         # 10. Generic detection fallback (detection models)
         if any(keyword in model_path_lower for keyword in ['detect', 'object', 'bbox']):
-            if 'ultralytics' in self._adapters:
+            if 'detectron2' in self._adapters:
+                logger.info("🎯 Generic detection -> detectron2")
+                return 'detectron2'
+            elif 'ultralytics' in self._adapters:
                 logger.info("🎯 Generic detection -> ultralytics")
                 return 'ultralytics'
+        
         # FINAL FALLBACK - NO DEFAULT TO FLUX!
         logger.warning(f"⚠️ No adapter detected for: {model_path}")
         logger.info(f"📊 Available adapters: {list(self._adapters.keys())}")
