@@ -83,7 +83,7 @@ The platform automatically searches for model files in the following locations:
 │   │   │   ├── yolov8n.pt
 │   │   │   └── yolov8s.pt
 │   │   └──v11/
-│   └── detectron2/
+│   └── detr/
 ├── segmentation/
 │   ├── sam/
 │   │   ├── sam_vit_h_4b8939.pth
@@ -91,12 +91,20 @@ The platform automatically searches for model files in the following locations:
 │   └── mask2former/
 ├── generation/
 │   ├── stable_diffusion/
-│   │   └── v1-5/
+│   │   ├── sd_2_1/
+│   │   └── sdxl_base_1.0/
 │   └── flux/
+├── inpainting/
+│   ├── sd_2_inpainting/
+│   └── lama/
+├── feature_extraction/
+│   └── dinov3/
+│       ├── dinov3-vit7b16-pretrain-lvd1689m/
+│       └── dinov3-vitl16-pretrain-lvd1689m/
 ├── classification/
 │   └── resnet/
 └── multimodal/
-    └── clip/
+    └── open_clip/
 ```
 
 ## 🎯 Supported Model Types
