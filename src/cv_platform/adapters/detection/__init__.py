@@ -1,12 +1,21 @@
 """
-检测模型适配器
+Detection Model Adapter
 """
 
 __all__ = []
 
-# 动态导入可用的适配器
+# Dynamic import available adapters
 try:
     from .ultralytics import UltralyticsAdapter
     __all__.append('UltralyticsAdapter')
 except ImportError:
     pass
+
+try:
+    from .detectron2 import Detectron2Adapter
+    __all__.append('Detectron2Adapter')
+except ImportError:
+    pass
+
+# Log the final status
+print(f"Detection adapters loaded: {__all__}")
