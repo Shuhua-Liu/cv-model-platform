@@ -1,7 +1,7 @@
 """
-DeepLabV3 分割适配器 - 支持torchvision的DeepLabV3模型
+DeepLabV3 Segmentation Adapter - Supports the DeepLabV3 model from torchvision 
 
-支持的模型：
+Supported models:
 - deeplabv3_resnet50
 - deeplabv3_resnet101  
 - deeplabv3_mobilenet_v3_large
@@ -24,117 +24,117 @@ try:
     TORCHVISION_AVAILABLE = True
 except ImportError:
     TORCHVISION_AVAILABLE = False
-    logger.warning("torchvision未安装，DeepLabV3适配器将不可用")
+    logger.warning("torchvision is not installed, the DeepLabV3 adapter will not be available.")
 
 
 class DeepLabV3Adapter(SegmentationAdapter):
-    """DeepLabV3模型适配器"""
+    """DeepLabV3 model adapter"""
     
     def __init__(self, 
                  model_path: Union[str, Path],
                  device: str = "auto",
-                 num_classes: int = 21,  # PASCAL VOC类别数
+                 num_classes: int = 21,  # PASCAL VOC num of class
                  batch_size: int = 1,
                  **kwargs):
         """
-        初始化DeepLabV3适配器
+        Initialize the DeepLabV3 adapter
         
         Args:
-            model_path: 模型文件路径
-            device: 计算设备
-            num_classes: 类别数（21为PASCAL VOC，81为COCO）
-            batch_size: 批处理大小
+            model_path: Path to the model file
+            device: Device to use for computation
+            num_classes: Number of classes (21 for PASCAL VOC, 81 for COCO)
+            batch_size: Batch size
         """
         if not TORCHVISION_AVAILABLE:
-            raise ImportError("需要安装torchvision: pip install torchvision")
+            raise ImportError("Need to install torchvision: pip install torchvision")
         
         super().__init__(model_path, device, **kwargs)
         
         self.num_classes = num_classes
         self.batch_size = batch_size
         
-        # 数据预处理
+        # Data preprocessing
         self.transform = transforms.Compose([
-            transforms.Resize((512, 512)),  # DeepLabV3通常使用512x512
+            transforms.Resize((512, 512)),  # DeepLabV3 usually uses 512x512.
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                                std=[0.229, 0.224, 0.225])
         ])
         
-        # PASCAL VOC类别名称
+        # PASCAL VOC class names
         self.class_names = [
             'background', 'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus',
             'car', 'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike',
             'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor'
         ]
         
-        # 如果是COCO数据集，类别数会更多
+        # If it's the COCO dataset, there would be more classes
         if num_classes > 21:
             self.class_names = [f'class_{i}' for i in range(num_classes)]
     
     def load_model(self) -> None:
-        """加载DeepLabV3模型"""
+        """Load the DeepLabV3 model"""
         try:
-            logger.info(f"加载DeepLabV3模型: {self.model_path}")
+            logger.info(f"Load the DeepLabV3 model: {self.model_path}")
             
-            # 根据文件名判断具体的模型架构
+            # Determine the specific model architecture based on the file name
             model_name = self.model_path.name.lower()
             
-            # 首先尝试直接加载用户的权重文件
+            # First, try to directly load the user's weight file
             if self.model_path.exists():
-                logger.info("检测到本地模型文件，尝试直接加载...")
+                logger.info("Detected local model file, attempting to load directly...")
                 
                 try:
-                    # 直接加载整个模型状态
+                    # Directly load the entire model state
                     checkpoint = torch.load(self.model_path, map_location=self.device)
                     
-                    # 如果是完整的模型，直接使用
+                    # If it's a complete model, use it directly
                     if hasattr(checkpoint, 'state_dict') or not isinstance(checkpoint, dict):
                         self.model = checkpoint
                         if hasattr(self.model, 'to'):
                             self.model = self.model.to(self.device)
                         self.model.eval()
                         self.is_loaded = True
-                        logger.info("成功直接加载完整模型")
+                        logger.info("Successfully loaded the complete model directly")
                         return
                 except Exception as e:
-                    logger.info(f"直接加载失败，尝试使用torchvision架构: {e}")
+                    logger.info(f"Direct loading failed, try using the torchvision architecture: {e}")
             
-            # 如果直接加载失败，使用torchvision架构
-            logger.info("使用torchvision架构创建模型...")
+            # If loading directly fails, use the torchvision architecture
+            logger.info("Create a model using the torchvision architecture...")
             
             if 'resnet101' in model_name:
                 self.model = models.segmentation.deeplabv3_resnet101(
-                    weights=None,  # 不使用预训练权重
+                    weights=None,  # Do not use pre-trained weights
                     num_classes=self.num_classes
                 )
-                logger.info("创建DeepLabV3-ResNet101架构")
+                logger.info("Create DeepLabV3-ResNet101 architecture")
             elif 'resnet50' in model_name:
                 self.model = models.segmentation.deeplabv3_resnet50(
                     weights=None,
                     num_classes=self.num_classes
                 )
-                logger.info("创建DeepLabV3-ResNet50架构")
+                logger.info("Create DeepLabV3-ResNet50 architecture")
             elif 'mobilenet' in model_name:
                 self.model = models.segmentation.deeplabv3_mobilenet_v3_large(
                     weights=None,
                     num_classes=self.num_classes
                 )
-                logger.info("创建DeepLabV3-MobileNetV3架构")
+                logger.info("Create DeepLabV3-MobileNetV3 architecture")
             else:
-                # 默认使用ResNet-101
+                # Default use ResNet-101
                 self.model = models.segmentation.deeplabv3_resnet101(
                     weights=None,
                     num_classes=self.num_classes
                 )
-                logger.info("创建默认DeepLabV3-ResNet101架构")
-            
-            # 加载用户的权重文件
+                logger.info("Create the default DeepLabV3-ResNet101 architecture")
+
+            # Load user weight file
             if self.model_path.exists():
-                logger.info("加载用户权重文件...")
+                logger.info("Load user weight file...")
                 checkpoint = torch.load(self.model_path, map_location=self.device)
-                
-                # 处理不同的检查点格式
+
+                # Handle different checkpoint formats
                 if isinstance(checkpoint, dict):
                     if 'model' in checkpoint:
                         state_dict = checkpoint['model']
@@ -145,55 +145,55 @@ class DeepLabV3Adapter(SegmentationAdapter):
                 else:
                     state_dict = checkpoint
                 
-                # 尝试加载状态字典
+                # Attempt to load the status dictionary
                 try:
                     self.model.load_state_dict(state_dict, strict=True)
-                    logger.info("成功加载用户权重（严格模式）")
+                    logger.info("Successfully loaded user weights (strict mode)")
                 except RuntimeError as e:
-                    logger.warning(f"严格模式加载失败，尝试非严格模式: {e}")
+                    logger.warning(f"Strict mode loading failed, try non-strict mode: {e}")
                     try:
                         self.model.load_state_dict(state_dict, strict=False)
-                        logger.info("成功加载用户权重（非严格模式）")
+                        logger.info("Successfully loaded user weights (non-strict mode)")
                     except RuntimeError as e:
-                        logger.error(f"权重加载失败: {e}")
-                        logger.info("使用随机初始化的权重")
+                        logger.error(f"Weight loading failed: {e}")
+                        logger.info("Use randomly initialized weights")
             else:
-                logger.warning(f"模型文件不存在: {self.model_path}")
-                logger.info("使用随机初始化的权重")
-            
-            # 移动到指定设备
+                logger.warning(f"Model file does not exist: {self.model_path}")
+                logger.info("Use randomly initialized weights")
+
+            # Move to specified device
             self.model = self.model.to(self.device)
             self.model.eval()
             
             self.is_loaded = True
-            logger.info(f"DeepLabV3模型加载成功 - 类别数: {self.num_classes}")
+            logger.info(f"DeepLabV3 model loaded successfully - Number of classes: {self.num_classes}")
             
         except Exception as e:
-            logger.error(f"DeepLabV3模型加载失败: {e}")
+            logger.error(f"DeepLabV3 model loading failed: {e}")
             raise
     
     def preprocess(self, input_data: Any) -> torch.Tensor:
-        """预处理输入数据"""
+        """Preprocess input data"""
         if isinstance(input_data, (str, Path)):
-            # 文件路径
+            # File path
             image = Image.open(input_data).convert('RGB')
         elif isinstance(input_data, Image.Image):
-            # PIL图像
+            # PIL image
             image = input_data.convert('RGB')
         elif isinstance(input_data, np.ndarray):
-            # numpy数组
+            # numpy array
             if input_data.ndim == 3 and input_data.shape[2] == 3:
                 image = Image.fromarray(input_data)
             else:
-                raise ValueError(f"不支持的numpy数组格式: {input_data.shape}")
+                raise ValueError(f"Unsupported numpy array format: {input_data.shape}")
         else:
-            raise ValueError(f"不支持的输入格式: {type(input_data)}")
-        
-        # 保存原始尺寸用于后处理
+            raise ValueError(f"Unsupported input format: {type(input_data)}")
+
+        # Save original size for post-processing
         self.original_size = image.size  # (width, height)
-        
-        # 应用预处理变换
-        tensor = self.transform(image).unsqueeze(0)  # 添加batch维度
+
+        # Apply preprocessing transforms
+        tensor = self.transform(image).unsqueeze(0)  # Add batch dimension
         return tensor.to(self.device)
     
     def predict(self, 
@@ -202,55 +202,55 @@ class DeepLabV3Adapter(SegmentationAdapter):
                 return_probabilities: bool = False,
                 **kwargs) -> Dict[str, Any]:
         """
-        执行图像分割
+        Perform image segmentation
         
         Args:
-            image: 输入图像
-            threshold: 分割阈值
-            return_probabilities: 是否返回概率图
-            
+            image: input image
+            threshold: segmentation threshold
+            return_probabilities: whether to return probability maps
+
         Returns:
-            分割结果字典
+            Segmentation result dictionary
         """
         if not self.is_loaded:
             self.load_model()
         
         try:
-            # 预处理输入
+            # Preprocess input
             input_tensor = self.preprocess(image)
             
-            # 执行推理
+            # Execute reasoning
             start_time = time.time()
             with torch.no_grad():
                 output = self.model(input_tensor)
                 
-                # DeepLabV3返回字典，包含'out'键
+                # DeepLabV3 returns a dictionary that contains the 'out' key
                 if isinstance(output, dict):
                     logits = output['out']
                 else:
                     logits = output
                 
-                # 应用softmax获取概率
+                # Using softmax to obtain probabilities
                 probabilities = F.softmax(logits, dim=1)
                 
-                # 获取预测类别
+                # Get predicted category
                 predictions = torch.argmax(probabilities, dim=1)
                 
             inference_time = time.time() - start_time
             
-            # 后处理结果
+            # Post-processing results
             processed_results = self.postprocess(
                 predictions, 
                 probabilities if return_probabilities else None,
                 threshold=threshold,
                 inference_time=inference_time
             )
-            
-            logger.debug(f"DeepLabV3分割完成 - 耗时: {inference_time:.3f}s")
+
+            logger.debug(f"DeepLabV3 segmentation completed - Time taken: {inference_time:.3f}s")
             return processed_results
             
         except Exception as e:
-            logger.error(f"DeepLabV3预测失败: {e}")
+            logger.error(f"DeepLabV3 prediction failed: {e}")
             raise
     
     def postprocess(self, 
@@ -258,9 +258,9 @@ class DeepLabV3Adapter(SegmentationAdapter):
                    probabilities: torch.Tensor = None,
                    threshold: float = 0.5,
                    **kwargs) -> Dict[str, Any]:
-        """后处理DeepLabV3输出"""
+        """Post-processing DeepLabV3 output"""
         try:
-            # 移到CPU并转换为numpy
+            # Move to CPU and convert to numpy
             pred_mask = predictions.squeeze(0).cpu().numpy()  # [H, W]
             
             if probabilities is not None:
@@ -268,13 +268,13 @@ class DeepLabV3Adapter(SegmentationAdapter):
             else:
                 prob_maps = None
             
-            # 调整到原始图像尺寸
+            # Adjust to the original image size
             from PIL import Image as PILImage
             pred_mask_pil = PILImage.fromarray(pred_mask.astype(np.uint8))
             pred_mask_resized = pred_mask_pil.resize(self.original_size, PILImage.NEAREST)
             pred_mask_final = np.array(pred_mask_resized)
             
-            # 生成分割掩码（每个类别一个掩码）
+            # Generate segmentation masks (one mask for each category)
             masks = []
             scores = []
             areas = []
@@ -283,10 +283,10 @@ class DeepLabV3Adapter(SegmentationAdapter):
             unique_classes = np.unique(pred_mask_final)
             
             for class_id in unique_classes:
-                if class_id == 0:  # 跳过背景类
+                if class_id == 0:  # Skip the background type
                     continue
                 
-                # 创建该类别的二值掩码
+                # Create a binary mask for this category
                 class_mask = (pred_mask_final == class_id).astype(np.uint8)
                 
                 if np.sum(class_mask) == 0:
@@ -294,9 +294,9 @@ class DeepLabV3Adapter(SegmentationAdapter):
                 
                 masks.append(class_mask)
                 
-                # 计算该类别的平均置信度
+                # Calculate the average confidence of this category
                 if prob_maps is not None:
-                    # 调整概率图尺寸
+                    # Adjust the size of the probability graph
                     prob_class = prob_maps[class_id]
                     prob_pil = PILImage.fromarray((prob_class * 255).astype(np.uint8))
                     prob_resized = prob_pil.resize(self.original_size, PILImage.BILINEAR)
@@ -305,13 +305,13 @@ class DeepLabV3Adapter(SegmentationAdapter):
                     avg_score = np.mean(prob_final[class_mask > 0])
                     scores.append(float(avg_score))
                 else:
-                    scores.append(1.0)  # 如果没有概率图，设为1.0
-                
-                # 计算面积
+                    scores.append(1.0)  # If there is no probability graph, set it to 1.0
+
+                # Calculate area
                 area = np.sum(class_mask)
                 areas.append(float(area))
-                
-                # 计算边界框
+
+                # Calculate bounding box
                 y_indices, x_indices = np.where(class_mask > 0)
                 if len(y_indices) > 0:
                     x_min, x_max = x_indices.min(), x_indices.max()
@@ -320,7 +320,7 @@ class DeepLabV3Adapter(SegmentationAdapter):
                 else:
                     bboxes.append([0.0, 0.0, 0.0, 0.0])
             
-            # 构建结果
+            # Construction Results
             result = {
                 'masks': np.array(masks) if masks else np.empty((0, *pred_mask_final.shape)),
                 'scores': scores,
@@ -329,7 +329,7 @@ class DeepLabV3Adapter(SegmentationAdapter):
                 'class_ids': [int(cls) for cls in unique_classes if cls != 0],
                 'class_names': [self.class_names[cls] if cls < len(self.class_names) else f'class_{cls}' 
                               for cls in unique_classes if cls != 0],
-                'prediction_mask': pred_mask_final,  # 完整的预测掩码
+                'prediction_mask': pred_mask_final,  # Complete prediction mask
                 'metadata': {
                     'inference_time': kwargs.get('inference_time', 0),
                     'original_size': self.original_size,
@@ -342,7 +342,7 @@ class DeepLabV3Adapter(SegmentationAdapter):
             return result
             
         except Exception as e:
-            logger.error(f"DeepLabV3后处理失败: {e}")
+            logger.error(f"DeepLabV3 post-processing failed: {e}")
             raise
     
     def visualize_results(self, 
@@ -350,9 +350,9 @@ class DeepLabV3Adapter(SegmentationAdapter):
                          results: Dict[str, Any],
                          save_path: str = None,
                          alpha: float = 0.6) -> Image.Image:
-        """可视化分割结果"""
+        """Visual segmentation results"""
         try:
-            # 加载原始图像
+            # Load the original image
             if isinstance(image, (str, Path)):
                 img = Image.open(image).convert('RGB')
             elif isinstance(image, Image.Image):
@@ -360,71 +360,71 @@ class DeepLabV3Adapter(SegmentationAdapter):
             elif isinstance(image, np.ndarray):
                 img = Image.fromarray(image).convert('RGB')
             else:
-                raise ValueError(f"不支持的图像格式: {type(image)}")
+                raise ValueError(f"Unsupported image format: {type(image)}")
             
-            # 确保图像尺寸匹配
+            # Ensure the image size matches
             img = img.resize(self.original_size)
             img_array = np.array(img)
             
-            # 获取预测掩码
+            # Obtain the prediction mask
             pred_mask = results['prediction_mask']
             
-            # 创建彩色分割图
+            # Create a color segmentation map
             colored_mask = np.zeros((*pred_mask.shape, 3), dtype=np.uint8)
             
-            # 为每个类别分配颜色
+            # Assign colors to each category
             colors = [
-                [0, 0, 0],      # 背景
-                [128, 0, 0],    # 飞机
-                [0, 128, 0],    # 自行车
-                [128, 128, 0],  # 鸟
-                [0, 0, 128],    # 船
-                [128, 0, 128],  # 瓶子
-                [0, 128, 128],  # 巴士
-                [128, 128, 128], # 车
-                [64, 0, 0],     # 猫
-                [192, 0, 0],    # 椅子
-                [64, 128, 0],   # 牛
-                [192, 128, 0],  # 餐桌
-                [64, 0, 128],   # 狗
-                [192, 0, 128],  # 马
-                [64, 128, 128], # 摩托车
-                [192, 128, 128], # 人
-                [0, 64, 0],     # 盆栽
-                [128, 64, 0],   # 羊
-                [0, 192, 0],    # 沙发
-                [128, 192, 0],  # 火车
-                [0, 64, 128],   # 电视
+                [0, 0, 0],      # Background
+                [128, 0, 0],    # Airplane
+                [0, 128, 0],    # Bicycle
+                [128, 128, 0],  # Bird
+                [0, 0, 128],    # Boat
+                [128, 0, 128],  # Bottle
+                [0, 128, 128],  # Bus
+                [128, 128, 128], # Car
+                [64, 0, 0],     # Cat
+                [192, 0, 0],    # Chair
+                [64, 128, 0],   # Cow
+                [192, 128, 0],  # Dining table
+                [64, 0, 128],   # Dog
+                [192, 0, 128],  # Horse
+                [64, 128, 128], # Motorbike
+                [192, 128, 128], # Person
+                [0, 64, 0],     # Potted plant
+                [128, 64, 0],   # Sheep
+                [0, 192, 0],    # Sofa
+                [128, 192, 0],  # Train
+                [0, 64, 128],   # TV/Monitor
             ]
             
-            # 应用颜色
+            # Apply Colors
             for class_id in np.unique(pred_mask):
                 if class_id < len(colors):
                     colored_mask[pred_mask == class_id] = colors[class_id]
-            
-            # 混合原图和分割图
+
+            # Blend the original image and the segmentation map
             blended = (1 - alpha) * img_array + alpha * colored_mask
             blended = blended.astype(np.uint8)
             
             result_img = Image.fromarray(blended)
             
-            # 保存图像
+            # Save image
             if save_path:
                 result_img.save(save_path)
-                logger.info(f"分割可视化结果已保存: {save_path}")
+                logger.info(f"The segmentation visualization result has been saved: {save_path}")
             
             return result_img
             
         except Exception as e:
-            logger.error(f"可视化失败: {e}")
-            # 返回原图像
+            logger.error(f"Visualization failed: {e}")
+            # Return to the original image
             if isinstance(image, Image.Image):
                 return image
             else:
                 return Image.open(image) if isinstance(image, (str, Path)) else Image.fromarray(image)
     
     def get_model_info(self) -> Dict[str, Any]:
-        """获取模型详细信息"""
+        """Get detailed information about the model"""
         info = super().get_model_info()
         
         info.update({
@@ -439,7 +439,7 @@ class DeepLabV3Adapter(SegmentationAdapter):
         
         if self.is_loaded:
             try:
-                # 获取模型参数数量
+                # Get the number of model parameters
                 total_params = sum(p.numel() for p in self.model.parameters())
                 trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
                 
@@ -449,6 +449,6 @@ class DeepLabV3Adapter(SegmentationAdapter):
                 })
                 
             except Exception as e:
-                logger.debug(f"获取模型详细信息失败: {e}")
+                logger.debug(f"Failed to obtain model details: {e}")
         
         return info
