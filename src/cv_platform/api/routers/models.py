@@ -247,7 +247,21 @@ async def load_model(
         
         # Get updated cache information
         cache_stats = model_manager.get_cache_stats()
-        cache_info = cache_stats.get('models', {}).get(model_name, {})
+                try:
+            models_cache = cache_stats.get('models', {})
+            if isinstance(models_cache, dict):
+                cache_info = models_cache.get(model_name, {})
+            elif isinstance(models_cache, list):
+                cache_info = {}
+                for item in models_cache:
+                    if isinstance(item, dict) and item.get('name') == model_name:
+                        cache_info = item
+                        break
+            else:
+                cache_info = {}
+        except Exception as cache_error:
+            logger.warning(f"Error processing cache stats: {cache_error}")
+            cache_info = {}
         
         # Get device information from adapter
         device_used = getattr(adapter, 'device', None)
